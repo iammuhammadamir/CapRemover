@@ -1,0 +1,125 @@
+============================================================
+[1/5] PREPROCESSING VIDEO
+============================================================
+
+Processed video: data/examples/trimmed_long_preprocessed.mp4
+Resolution: 900x1600, FPS: 24.0
+✓ Preprocessing completed in 2.46s
+
+============================================================
+[2/5] CREATING MASK
+============================================================
+ROI preview saved to: data/results/roi_preview.png
+Creating mask from video: data/examples/trimmed_long_preprocessed.mp4
+Initializing video reader...
+Video info: 192 frames, 24.00 fps, 900x1600
+Initializing model and video writers...
+Settings: MODEL=PP-OCRv5_server_det, DEBUG=True, BATCH_SIZE=32, LIMIT_SIDE_LEN=1024, UNCLIP_RATIO=2.5, MASK_DILATION=10, ROI=(191, 1083, 508, 150)
+Starting streaming processing (batch size: 32)...
+Progress: 192/192 frames (31.18 fps)
+
+=== Summary ===
+Total frames: 192
+Total time: 6.16s (31.15 fps)
+Total text detections: 237
+Average detections per frame: 1.23
+✓ Text detection successful!
+
+Output files:
+  Mask video: data/results/mask_video.mp4
+  Overlay video: data/results/overlay_video.mp4
+
+Mask video: data/results/mask_video.mp4
+✓ Mask creation completed in 6.17s
+
+============================================================
+[3/5] CROPPING TO 2X ROI REGION
+============================================================
+Cropping video from 900x1600 to 900x300
+Original ROI: (191, 1083, 508, 150)
+Crop region: (0, 1008, 900, 300)
+New ROI in cropped coords: (191, 75, 508, 150)
+Cropping video from 900x1600 to 900x300
+Original ROI: (191, 1083, 508, 150)
+Crop region: (0, 1008, 900, 300)
+New ROI in cropped coords: (191, 75, 508, 150)
+
+Cropped video: data/results/video_cropped_2x_roi.mp4
+Cropped mask: data/results/mask_cropped_2x_roi.mp4
+✓ Cropping completed in 1.34s
+
+============================================================
+[4/5] INPAINTING (2X ROI REGION)
+============================================================
+
+Starting inpainting pipeline...
+Input video: data/results/video_cropped_2x_roi.mp4
+Input mask: data/results/mask_cropped_2x_roi.mp4
+Using device: cuda
+
+[1/2] Running Propainter...
+Loading Propainter model (first run may take 1-2 minutes)...
+Propainter model loaded!
+Priori generating: [192 frames]...
+Propainter completed in 8.77s
+
+[2/2] Running DiffuEraser...
+DiffuEraser.__init__: xFormers not available (Refer to https://github.com/facebookresearch/xformers for more information on how to install xformers), using default attention (PyTorch 2.0+ will use SDPA)
+DiffuEraser inference...
+DiffuEraser completed in 20.56s
+
+=== Inpainting Summary ===
+Propainter time: 8.77s
+DiffuEraser time: 20.56s
+Total time: 32.16s
+
+Outputs:
+  Propainter: data/results/propainter_result.mp4
+  DiffuEraser: data/results/diffueraser_result.mp4
+
+============================================================
+[5/6] COMPOSITING RESULTS
+============================================================
+
+=== Compositing Settings ===
+Preprocessed video: 900x1600
+Crop region used: 900x300 at (0, 1008)
+Overlay position: (0, 1008)
+
+Compositing Propainter result...
+✓ Propainter composited: data/results/propainter_composited.mp4
+
+Compositing DiffuEraser result...
+✓ DiffuEraser composited: data/results/diffueraser_composited.mp4
+✓ Compositing completed in 1.77s
+
+============================================================
+[6/6] COMPRESSING VIDEOS
+============================================================
+✓ Video compression completed in 5.71s
+
+============================================================
+PIPELINE COMPLETE
+============================================================
+
+⏱️  TIMING BREAKDOWN:
+  [1] Preprocessing:    2.46s
+  [2] Mask creation:    6.17s
+  [3] ROI Cropping:     1.34s
+  [4] Inpainting:      32.18s
+  [5] Compositing:      1.77s
+  [6] Compression:      5.71s
+  -----------------------------------
+  TOTAL TIME:         49.75s (0.8 min)
+
+📁 INTERMEDIATE FILES:
+  • Cropped video:   data/results/video_cropped_2x_roi.mp4
+  • Cropped mask:    data/results/mask_cropped_2x_roi.mp4
+  • Propainter:      data/results/propainter_result.mp4
+  • DiffuEraser:     data/results/diffueraser_result.mp4
+
+📁 FINAL COMPOSITED VIDEOS:
+  • Propainter:      data/results/propainter_composited.mp4
+  • DiffuEraser:     data/results/diffueraser_composited.mp4
+
+✨ DiffuEraser composited is the refined final result!
