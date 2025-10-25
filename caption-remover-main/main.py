@@ -4,11 +4,30 @@ import torch
 torch.cuda.init()  # Force CUDA initialization
 
 import time
+import sys
 from src.stages.create_mask import create_mask_video, visualize_roi
 from src.stages.preprocessing import preprocess_video, run_precheck, downscale_video, crop_video_to_roi
 from src.stages.inpaint.inpaint import run_inpainting
 from src.stages.postprocessing.composite import composite_inpainted_region
 from src.stages.postprocessing.compress import compress_videos
+
+
+class TeeOutput:
+    """Write to both console and file simultaneously."""
+    def __init__(self, file_path):
+        self.terminal = sys.stdout
+        self.log = open(file_path, 'w', buffering=1)  # Line buffered
+    
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+    
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+    
+    def close(self):
+        self.log.close()
 
 
 def main():
@@ -24,6 +43,10 @@ def main():
     # Run: python roi.py to find the correct x, y,`` width, height for the caption region
     roi = (191, 1083, 508, 150)  # SCALED ROI for preprocessed video (900x1600)
     # for long.mp4 use: (230,1300,610,180)
+    
+    # Optimization settings
+    raft_iter = 12  # Reduce RAFT iterations from 20 to 12 (40% faster optical flow)
+    enable_pre_inference = False  # Skip DiffuEraser keyframe pass for static captions
 
 
 
@@ -83,7 +106,9 @@ def main():
         video_path=cropped_video, 
         mask_path=cropped_mask, 
         mask_dilation=8, 
-        max_img_size=720
+        max_img_size=720,
+        raft_iter=raft_iter,
+        enable_pre_inference=enable_pre_inference
     )
     inpaint_time = time.time() - inpaint_start
     
@@ -139,5 +164,14 @@ def main():
     print(f"\n✨ DiffuEraser composited is the refined final result!")
 
 if __name__ == "__main__":
-    main()
+    # Redirect stdout to both terminal and file
+    tee = TeeOutput("terminal_output.txt")
+    sys.stdout = tee
+    
+    try:
+        main()
+    finally:
+        # Restore original stdout and close log file
+        sys.stdout = tee.terminal
+        tee.close()
 

@@ -252,7 +252,7 @@ class DiffuEraser:
 
     def forward(self, validation_image, validation_mask, priori, output_path,
                 max_img_size = 1280, video_length=2, mask_dilation_iter=4,
-                nframes=22, seed=None, revision = None, guidance_scale=None, blended=True):
+                nframes=22, seed=None, revision = None, guidance_scale=None, blended=True, enable_pre_inference=True):
         validation_prompt = ""  # 
         guidance_scale_final = self.guidance_scale if guidance_scale==None else guidance_scale
 
@@ -333,7 +333,7 @@ class DiffuEraser:
         validation_masks_input_ori = copy.deepcopy(validation_masks_input)
         resized_frames_ori = copy.deepcopy(resized_frames)
         ################  Pre-inference  ################
-        if n_total_frames > nframes*2: ## do pre-inference only when number of input frames is larger than nframes*2
+        if enable_pre_inference and n_total_frames > nframes*2: ## do pre-inference only when number of input frames is larger than nframes*2
             ## sample
             step = n_total_frames / nframes
             sample_index = [int(i * step) for i in range(nframes)]
