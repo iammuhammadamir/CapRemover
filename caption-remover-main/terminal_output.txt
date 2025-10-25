@@ -4,7 +4,7 @@
 
 Processed video: data/examples/trimmed_long_preprocessed.mp4
 Resolution: 900x1600, FPS: 24.0
-✓ Preprocessing completed in 2.46s
+✓ Preprocessing completed in 2.44s
 
 ============================================================
 [2/5] CREATING MASK
@@ -16,11 +16,11 @@ Video info: 192 frames, 24.00 fps, 900x1600
 Initializing model and video writers...
 Settings: MODEL=PP-OCRv5_server_det, DEBUG=True, BATCH_SIZE=32, LIMIT_SIDE_LEN=1024, UNCLIP_RATIO=2.5, MASK_DILATION=10, ROI=(191, 1083, 508, 150)
 Starting streaming processing (batch size: 32)...
-Progress: 192/192 frames (31.18 fps)
+Progress: 192/192 frames (30.09 fps)
 
 === Summary ===
 Total frames: 192
-Total time: 6.16s (31.15 fps)
+Total time: 6.39s (30.06 fps)
 Total text detections: 237
 Average detections per frame: 1.23
 ✓ Text detection successful!
@@ -30,7 +30,7 @@ Output files:
   Overlay video: data/results/overlay_video.mp4
 
 Mask video: data/results/mask_video.mp4
-✓ Mask creation completed in 6.17s
+✓ Mask creation completed in 6.43s
 
 ============================================================
 [3/5] CROPPING TO 2X ROI REGION
@@ -46,7 +46,7 @@ New ROI in cropped coords: (191, 75, 508, 150)
 
 Cropped video: data/results/video_cropped_2x_roi.mp4
 Cropped mask: data/results/mask_cropped_2x_roi.mp4
-✓ Cropping completed in 1.34s
+✓ Cropping completed in 1.36s
 
 ============================================================
 [4/5] INPAINTING (2X ROI REGION)
@@ -59,19 +59,31 @@ Using device: cuda
 
 [1/2] Running Propainter...
 Loading Propainter model (first run may take 1-2 minutes)...
-Propainter model loaded!
+Propainter model loaded in 0.60s
 Priori generating: [192 frames]...
-Propainter completed in 8.77s
+Propainter inference completed in 8.84s
 
 [2/2] Running DiffuEraser...
+Loading DiffuEraser model (first run may take 1-2 minutes)...
 DiffuEraser.__init__: xFormers not available (Refer to https://github.com/facebookresearch/xformers for more information on how to install xformers), using default attention (PyTorch 2.0+ will use SDPA)
-DiffuEraser inference...
-DiffuEraser completed in 20.56s
+DiffuEraser model loaded in 2.26s
+  [4a] I/O (read video/mask/priori): 1.92s
+  DiffuEraser inference...
+  [4b] VAE encode priori: 0.04s
+  [4c] Pre-inference: SKIPPED (enable_pre_inference=False)
+  [4d] Main inference (2-step): 15.48s
+  [4e] Compositing & write: 0.41s
+  DiffuEraser total: 20.74s
+DiffuEraser inference completed in 20.74s
 
 === Inpainting Summary ===
-Propainter time: 8.77s
-DiffuEraser time: 20.56s
-Total time: 32.16s
+Model loading:
+  Propainter load:   0.60s
+  DiffuEraser load:  2.26s
+Inference:
+  Propainter:        8.84s
+  DiffuEraser:       20.74s
+Total inpainting:    32.44s
 
 Outputs:
   Propainter: data/results/propainter_result.mp4
@@ -91,26 +103,26 @@ Compositing Propainter result...
 
 Compositing DiffuEraser result...
 ✓ DiffuEraser composited: data/results/diffueraser_composited.mp4
-✓ Compositing completed in 1.77s
+✓ Compositing completed in 1.78s
 
 ============================================================
 [6/6] COMPRESSING VIDEOS
 ============================================================
-✓ Video compression completed in 5.71s
+✓ Video compression completed in 5.73s
 
 ============================================================
 PIPELINE COMPLETE
 ============================================================
 
 ⏱️  TIMING BREAKDOWN:
-  [1] Preprocessing:    2.46s
-  [2] Mask creation:    6.17s
-  [3] ROI Cropping:     1.34s
-  [4] Inpainting:      32.18s
-  [5] Compositing:      1.77s
-  [6] Compression:      5.71s
+  [1] Preprocessing:    2.44s
+  [2] Mask creation:    6.43s
+  [3] ROI Cropping:     1.36s
+  [4] Inpainting:      32.46s
+  [5] Compositing:      1.78s
+  [6] Compression:      5.73s
   -----------------------------------
-  TOTAL TIME:         49.75s (0.8 min)
+  TOTAL TIME:         50.33s (0.8 min)
 
 📁 INTERMEDIATE FILES:
   • Cropped video:   data/results/video_cropped_2x_roi.mp4

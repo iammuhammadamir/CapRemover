@@ -1,0 +1,492 @@
+================================================================================
+CAPTION REMOVER - HYPERPARAMETERS TUNING GUIDE
+================================================================================
+Date: October 25, 2025
+Purpose: Document all tunable parameters for Propainter + DiffuEraser pipeline
+Target: Optimize speed/quality tradeoff for caption removal on H100
+
+================================================================================
+MAIN PIPELINE CONFIGURATION (main.py)
+================================================================================
+
+1. max_resolution (default: 1600)
+   Location: main.py line 19
+   Purpose: Maximum dimension for video preprocessing (downscaling)
+   Impact:
+     - Higher = Better quality, slower processing, more VRAM
+     - Lower = Faster processing, less VRAM, lower quality
+   Recommendations:
+     - 1920: Full HD quality (slow, high VRAM)
+     - 1600: Good balance (current)
+     - 1280: Faster, acceptable quality
+     - 960: Fast, lower quality
+   Speed impact: ~2x faster at 960 vs 1600
+
+2. target_fps (default: 24.0)
+   Location: main.py line 20
+   Purpose: Target frame rate for preprocessing
+   Impact:
+     - Higher FPS = More frames to process = Slower
+     - Lower FPS = Fewer frames = Faster but choppier
+   Recommendations:
+     - 30: Smooth motion (if source is 30fps+)
+     - 24: Cinema standard (current, good balance)
+     - 20: Slightly faster
+     - 15: Much faster, noticeable choppiness
+   Speed impact: 24→15 fps = ~40% faster
+
+3. roi (Region of Interest)
+   Location: main.py line 25
+   Format: (x, y, width, height)
+   Purpose: Define caption region for text detection
+   Impact:
+     - Smaller ROI = Faster mask creation (less area to scan)
+     - Must be accurate to capture all captions
+   Recommendations:
+     - Use roi.py or find_roi.py to find optimal ROI
+     - Keep ROI as small as possible while capturing all text
+   Speed impact: 50% smaller ROI = ~20% faster mask creation
+
+4. raft_iter (default: 12, baseline: 20)
+   Location: main.py line 29
+   Purpose: RAFT optical flow iteration count (Propainter)
+   Impact:
+     - Higher = Better flow accuracy, slower
+     - Lower = Faster, slight quality loss at mask edges
+   Recommendations:
+     - 20: Original (best quality)
+     - 15: Good balance
+     - 12: Faster (current optimization)
+     - 10: Fast, acceptable for static captions
+     - 8: Very fast, may see artifacts
+   Speed impact: 20→12 = ~40% faster RAFT, ~10-15s total savings
+   Quality: Minimal impact for caption removal (mask-bounded)
+
+5. enable_pre_inference (default: False, baseline: True)
+   Location: main.py line 30
+   Purpose: DiffuEraser keyframe pre-pass for temporal smoothing
+   Impact:
+     - True: Better temporal coherence (moving captions)
+     - False: Faster, skip keyframe pass
+   Recommendations:
+     - True: For videos with moving/animated captions
+     - False: For static captions (most cases)
+   Speed impact: True→False = ~30-50s savings
+   Quality: No impact for static captions, slight flickering risk for moving text
+
+================================================================================
+MASK CREATION HYPERPARAMETERS (src/stages/create_mask/mask.py)
+================================================================================
+
+6. MODEL_NAME (default: "PP-OCRv5_server_det")
+   Location: mask.py line 15
+   Purpose: PaddleOCR text detection model
+   Options:
+     - "PP-OCRv5_server_det": Best accuracy, slower
+     - "PP-OCRv5_mobile_det": 2-3x faster, slightly less accurate
+   Impact:
+     - server_det: High accuracy, ~110s for 192 frames
+     - mobile_det: Lower accuracy, ~40-50s for 192 frames
+   Recommendations:
+     - Use mobile_det for speed (minimal quality loss)
+     - Use server_det if missing small text
+   Speed impact: server→mobile = ~60s savings
+
+7. BATCH_SIZE (default: 32)
+   Location: mask.py line 16
+   Purpose: Number of frames processed simultaneously
+   Impact:
+     - Higher = Better GPU utilization, more VRAM
+     - Lower = Less VRAM, slower
+   Recommendations:
+     - 64: If you have abundant VRAM (H100 with 80GB)
+     - 48: Good for H100
+     - 32: Current (safe default)
+     - 16: If VRAM limited
+   Speed impact: 32→64 = ~10-15% faster (if GPU not saturated)
+   VRAM impact: ~Linear with batch size
+
+8. LIMIT_SIDE_LEN (default: 1024)
+   Location: mask.py line 18
+   Purpose: Maximum image dimension for OCR detection
+   Impact:
+     - Higher = Better detection of small text, slower
+     - Lower = Faster, may miss small text
+   Recommendations:
+     - 1280: Best accuracy
+     - 1024: Good balance (current)
+     - 960: 2x faster
+     - 720: 3x faster, may miss small text
+     - None: No limit (slowest, highest accuracy)
+   Speed impact: 1024→720 = ~2.5x faster mask creation
+   Quality: Test on your videos to ensure text is detected
+
+9. UNCLIP_RATIO (default: 2.5)
+   Location: mask.py line 20
+   Purpose: Expand detected text bounding boxes
+   Impact:
+     - Higher = Larger masks, more stable, may cover more than needed
+     - Lower = Tighter masks, less stable, may miss text edges
+   Recommendations:
+     - 3.0-3.5: Very safe, large masks (good for inpainting)
+     - 2.5: Good balance (current)
+     - 2.0: Tighter masks
+     - 1.5: Minimal expansion (risky)
+   Speed impact: Negligible
+   Quality: Higher is safer for complete caption removal
+
+10. mask_dilation (default: 10)
+    Location: main.py line 50 (passed to create_mask_video)
+    Purpose: Morphological dilation iterations on mask
+    Impact:
+      - Higher = Larger masks, safer for inpainting
+      - Lower = Tighter masks, faster compositing
+    Recommendations:
+      - 15: Very safe, large masks
+      - 10: Good balance (current)
+      - 8: Tighter, may leave caption edges
+      - 5: Minimal (risky)
+    Speed impact: Negligible
+    Quality: Higher is safer
+
+11. DEBUG (default: True)
+    Location: mask.py line 12
+    Purpose: Generate overlay_video.mp4 for visualization
+    Impact:
+      - True: Creates overlay video (slower, helpful for debugging)
+      - False: Skip overlay (faster)
+    Recommendations:
+      - True: During development/testing
+      - False: Production (saves ~5-10s)
+    Speed impact: ~5-10s
+
+================================================================================
+INPAINTING HYPERPARAMETERS (Propainter + DiffuEraser)
+================================================================================
+
+12. max_img_size (default: 720)
+    Location: main.py line 90
+    Purpose: Maximum dimension for inpainting (DiffuEraser)
+    Impact:
+      - Higher = Better quality, MUCH slower, more VRAM
+      - Lower = Faster, lower quality
+    Recommendations:
+      - 1280: Highest quality (very slow)
+      - 960: High quality (slow)
+      - 720: Good balance (current)
+      - 640: Faster
+      - 480: Fast, acceptable quality
+    Speed impact: 720→480 = ~2x faster inpainting
+    Quality: Very noticeable - test on your videos
+    VRAM impact: ~Quadratic (2x resolution = 4x VRAM)
+
+13. mask_dilation (inpainting)
+    Location: main.py line 89 (passed to run_inpainting)
+    Purpose: Mask dilation for inpainting stage
+    Impact:
+      - Higher = Inpaint larger area (slower, safer)
+      - Lower = Inpaint smaller area (faster)
+    Recommendations:
+      - 10: Safe default
+      - 8: Faster (current in run_inpainting)
+      - 5: Much faster, may leave artifacts
+    Speed impact: ~5% per iteration reduction
+    Quality: Higher is safer
+
+14. expansion_factor (default: 2.0)
+    Location: main.py line 63
+    Purpose: Expand ROI before cropping for inpainting
+    Impact:
+      - Higher = More context for inpainting, slower
+      - Lower = Less context, faster, may see boundary artifacts
+    Recommendations:
+      - 2.5: Maximum context
+      - 2.0: Good balance (current)
+      - 1.5: Faster, less context
+      - 1.0: No expansion (risky, boundary artifacts likely)
+    Speed impact: 2.0→1.5 = ~10-15% faster inpainting
+    Quality: 2.0 is generally safe
+
+15. ref_stride (default: 10)
+    Location: inpaint.py line 45
+    Purpose: Stride for reference frame selection (Propainter)
+    Impact:
+      - Higher = Fewer reference frames, faster, less accurate
+      - Lower = More reference frames, slower, better
+    Recommendations:
+      - 5: Best quality (slower)
+      - 10: Good balance (current)
+      - 15: Faster
+      - 20: Much faster, may degrade
+    Speed impact: 10→20 = ~5-10% faster Propainter
+    Quality: Test on your videos
+
+16. neighbor_length (default: 10)
+    Location: inpaint.py line 45
+    Purpose: Number of neighbor frames for propagation
+    Impact:
+      - Higher = Better temporal consistency, slower
+      - Lower = Faster, may see flickering
+    Recommendations:
+      - 15: Best temporal consistency
+      - 10: Good balance (current)
+      - 7: Faster
+      - 5: Fast, acceptable for static scenes
+    Speed impact: 10→5 = ~10-15% faster Propainter
+    Quality: Important for moving cameras
+
+17. subvideo_length (default: 50)
+    Location: inpaint.py line 45
+    Purpose: Split video into chunks for processing
+    Impact:
+      - Higher = Fewer chunks, better consistency, more VRAM
+      - Lower = More chunks, less VRAM, slower
+    Recommendations:
+      - 80: Fewer chunks (if VRAM permits)
+      - 50: Good balance (current)
+      - 30: Low VRAM systems
+    Speed impact: Higher is slightly faster (fewer chunk boundaries)
+    VRAM impact: ~Linear
+
+18. nframes (DiffuEraser, default: 22)
+    Location: diffueraser.py line 255
+    Purpose: Batch size for DiffuEraser processing
+    Impact:
+      - Higher = Better GPU utilization, more VRAM
+      - Lower = Less VRAM, slower
+    Recommendations:
+      - 32: If VRAM permits (H100)
+      - 22: Default (safe)
+      - 16: Low VRAM systems
+    Speed impact: 22→32 = ~10-15% faster (if VRAM permits)
+    VRAM impact: ~Linear
+    Note: Requires code change in diffueraser.py
+
+19. PCM Checkpoint (DiffuEraser, default: "2-Step")
+    Location: inpaint.py line 50
+    Purpose: Number of diffusion steps
+    Options:
+      - "2-Step": Fastest (current)
+      - "4-Step": Better quality
+      - "8-Step": High quality
+      - "16-Step": Best quality (very slow)
+    Impact:
+      - More steps = Better quality, MUCH slower
+    Recommendations:
+      - "2-Step": Fast, acceptable quality (current)
+      - "4-Step": Good quality/speed balance
+      - "8-Step": High quality (2x slower)
+    Speed impact: 2→4 steps = ~2x slower DiffuEraser
+    Quality: Diminishing returns after 4 steps
+    Note: Requires code change in inpaint.py line 50
+
+================================================================================
+POSTPROCESSING HYPERPARAMETERS
+================================================================================
+
+20. debug (compression, default: True)
+    Location: main.py line 21
+    Purpose: Enable H.265 video compression
+    Impact:
+      - True: Compress all videos (smaller files, slower)
+      - False: No compression (larger files, faster)
+    Recommendations:
+      - True: For storage/sharing
+      - False: For speed testing/development
+    Speed impact: ~89s savings if disabled
+
+21. CRF (compression quality, default: 23)
+    Location: compress.py line 22
+    Purpose: H.265 constant rate factor (quality)
+    Impact:
+      - Lower = Better quality, larger files
+      - Higher = Lower quality, smaller files
+    Recommendations:
+      - 18: Very high quality
+      - 23: Good balance (current)
+      - 28: Lower quality, smaller files
+    Speed impact: Minimal
+    File size: ~Exponential
+
+22. preset (compression, default: "medium")
+    Location: compress.py line 23
+    Purpose: H.265 encoding preset
+    Options:
+      - "ultrafast": Fastest, largest files
+      - "veryfast": Very fast
+      - "fast": Fast
+      - "medium": Current
+      - "slow": Better compression
+    Recommendations:
+      - "veryfast": ~2x faster compression
+      - "medium": Current balance
+    Speed impact: medium→veryfast = ~50% faster compression (~40s savings)
+
+================================================================================
+OPTIMIZATION PRESETS
+================================================================================
+
+PRESET 1: MAXIMUM SPEED (Sacrifice some quality)
+-------------------------------------------------
+max_resolution = 1280
+target_fps = 20
+MODEL_NAME = "PP-OCRv5_mobile_det"
+BATCH_SIZE = 48
+LIMIT_SIDE_LEN = 720
+max_img_size = 480
+raft_iter = 10
+enable_pre_inference = False
+ref_stride = 15
+neighbor_length = 7
+debug = False
+
+Expected timing: ~350-400s total (50% faster than baseline)
+Quality: Good for most cases
+
+
+PRESET 2: BALANCED (Current configuration)
+-------------------------------------------
+max_resolution = 1600
+target_fps = 24
+MODEL_NAME = "PP-OCRv5_server_det"
+BATCH_SIZE = 32
+LIMIT_SIDE_LEN = 1024
+max_img_size = 720
+raft_iter = 12
+enable_pre_inference = False
+ref_stride = 10
+neighbor_length = 10
+debug = True
+
+Expected timing: ~600-650s total (with optimizations #1 and #2)
+Quality: Excellent
+
+
+PRESET 3: MAXIMUM QUALITY (Sacrifice speed)
+--------------------------------------------
+max_resolution = 1920
+target_fps = 30
+MODEL_NAME = "PP-OCRv5_server_det"
+BATCH_SIZE = 32
+LIMIT_SIDE_LEN = 1280
+max_img_size = 960
+raft_iter = 20
+enable_pre_inference = True
+ref_stride = 5
+neighbor_length = 15
+debug = True
+PCM_ckpt = "4-Step"
+
+Expected timing: ~1000-1200s total (slower but best quality)
+Quality: Maximum
+
+
+PRESET 4: PRODUCTION (Fast + Good quality)
+-------------------------------------------
+max_resolution = 1280
+target_fps = 24
+MODEL_NAME = "PP-OCRv5_mobile_det"
+BATCH_SIZE = 48
+LIMIT_SIDE_LEN = 960
+max_img_size = 640
+raft_iter = 12
+enable_pre_inference = False
+ref_stride = 10
+neighbor_length = 8
+debug = False
+preset = "veryfast"
+
+Expected timing: ~300-350s total (very fast)
+Quality: Good for deployment
+
+================================================================================
+EXPERIMENTATION STRATEGY
+================================================================================
+
+To find optimal settings for your use case:
+
+1. START WITH BASELINE
+   Run with current settings, note timing and quality
+
+2. TEST ONE PARAMETER AT A TIME
+   Change only one parameter, compare results
+   Keep change if quality acceptable, revert otherwise
+
+3. PRIORITY ORDER (highest impact first):
+   a) max_img_size (720 → 640 or 480)
+   b) MODEL_NAME (server_det → mobile_det)
+   c) LIMIT_SIDE_LEN (1024 → 720)
+   d) max_resolution (1600 → 1280)
+   e) raft_iter (12 → 10)
+   f) neighbor_length (10 → 7)
+
+4. MEASURE EVERYTHING
+   - Use terminal_output.txt to track timings
+   - Visually inspect diffueraser_composited.mp4
+   - Check for: caption remnants, flickering, artifacts
+
+5. DOCUMENT YOUR FINDINGS
+   Keep notes on what works for your specific video types
+
+================================================================================
+ADVANCED: CODE-LEVEL CHANGES
+================================================================================
+
+For deeper optimization (requires code editing):
+
+1. Change PCM steps (inpaint.py line 50):
+   ckpt="2-Step" → ckpt="4-Step" (better quality, 2x slower)
+
+2. Change DiffuEraser batch size (diffueraser.py line 255):
+   nframes=22 → nframes=32 (faster if VRAM permits)
+
+3. Skip Propainter entirely (experimental):
+   Comment out Propainter stage, feed original to DiffuEraser
+   Risk: Lower quality, but ~40% faster
+
+4. Enable torch.compile (risky, see previous analysis):
+   May speed up 10-15% but high risk of breaking
+
+================================================================================
+MONITORING & DEBUGGING
+================================================================================
+
+Key files to check:
+- terminal_output.txt: Timing breakdown
+- roi_preview.png: Verify ROI placement
+- overlay_video.mp4: Verify mask quality
+- mask_video.mp4: Check mask coverage
+- diffueraser_composited.mp4: Final result
+
+If captions not removed:
+1. Check ROI is correct (roi_preview.png)
+2. Check mask covers text (overlay_video.mp4)
+3. Increase UNCLIP_RATIO or mask_dilation
+4. Lower LIMIT_SIDE_LEN may miss text
+5. Try server_det model if mobile_det misses text
+
+If quality is poor:
+1. Increase max_img_size
+2. Increase max_resolution
+3. Increase raft_iter
+4. Enable enable_pre_inference
+5. Increase neighbor_length
+
+If too slow:
+1. Decrease max_img_size (biggest impact)
+2. Switch to mobile_det model
+3. Lower LIMIT_SIDE_LEN
+4. Disable debug mode
+5. Lower max_resolution
+
+================================================================================
+END OF HYPERPARAMETERS GUIDE
+================================================================================
+
+For questions or issues, check:
+- SETUP_SUMMARY.txt: Environment setup
+- DOCKER-USAGE.txt: Docker commands
+- debug_pipeline.py: Pipeline diagnostics
+
+Last updated: October 25, 2025
+

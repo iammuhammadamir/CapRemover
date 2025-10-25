@@ -38,29 +38,41 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     
     print("\n[1/2] Running Propainter...")
     print("Loading Propainter model (first run may take 1-2 minutes)...")
+    model_load_start = time.time()
     propainter_model = Propainter(propainter, device=device)
-    print("Propainter model loaded!")
+    model_load_time = time.time() - model_load_start
+    print(f"Propainter model loaded in {model_load_time:.2f}s")
+    
     prop_start = time.time()
     propainter_model.forward(video_path, mask_path, priori_path, video_length=video_length, 
                             ref_stride=10, neighbor_length=10, subvideo_length=50, mask_dilation=mask_dilation, raft_iter=raft_iter)
     prop_time = time.time() - prop_start
-    print(f"Propainter completed in {prop_time:.2f}s")
+    print(f"Propainter inference completed in {prop_time:.2f}s")
     
     print("\n[2/2] Running DiffuEraser...")
+    print("Loading DiffuEraser model (first run may take 1-2 minutes)...")
+    diffueraser_load_start = time.time()
     diffueraser_model = DiffuEraser(device, base_model, vae, diffueraser, ckpt="2-Step", pcm_weights_path=pcm_weights)
+    diffueraser_load_time = time.time() - diffueraser_load_start
+    print(f"DiffuEraser model loaded in {diffueraser_load_time:.2f}s")
+    
     diff_start = time.time()
     diffueraser_model.forward(video_path, mask_path, priori_path, final_path,
                              max_img_size=max_img_size, video_length=video_length,
                              mask_dilation_iter=mask_dilation, guidance_scale=None,
                              enable_pre_inference=enable_pre_inference)
     diff_time = time.time() - diff_start
-    print(f"DiffuEraser completed in {diff_time:.2f}s")
+    print(f"DiffuEraser inference completed in {diff_time:.2f}s")
     
     total_time = time.time() - start
     print(f"\n=== Inpainting Summary ===")
-    print(f"Propainter time: {prop_time:.2f}s")
-    print(f"DiffuEraser time: {diff_time:.2f}s")
-    print(f"Total time: {total_time:.2f}s")
+    print(f"Model loading:")
+    print(f"  Propainter load:   {model_load_time:.2f}s")
+    print(f"  DiffuEraser load:  {diffueraser_load_time:.2f}s")
+    print(f"Inference:")
+    print(f"  Propainter:        {prop_time:.2f}s")
+    print(f"  DiffuEraser:       {diff_time:.2f}s")
+    print(f"Total inpainting:    {total_time:.2f}s")
     print(f"\nOutputs:")
     print(f"  Propainter: {priori_path}")
     print(f"  DiffuEraser: {final_path}")

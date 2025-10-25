@@ -265,13 +265,17 @@ class DiffuEraser:
     def forward(self, validation_image, validation_mask, priori, output_path,
                 max_img_size = 1280, video_length=2, mask_dilation_iter=4,
                 nframes=22, seed=None, revision = None, guidance_scale=None, blended=True, enable_pre_inference=True):
+        import time
+        forward_start = time.time()
+        
         validation_prompt = ""  # 
         guidance_scale_final = self.guidance_scale if guidance_scale==None else guidance_scale
 
         if (max_img_size<256 or max_img_size>1920):
             raise ValueError("The max_img_size must be larger than 256, smaller than 1920.")
 
-        ################ read input video ################ 
+        ################ read input video ################
+        io_start = time.time() 
         frames, fps, img_size, n_clip, n_total_frames = read_video(validation_image, video_length, nframes, max_img_size)
         video_len = len(frames)
 
@@ -294,11 +298,14 @@ class DiffuEraser:
         validation_masks_input = resize_frames(validation_masks_input)
         validation_images_input = resize_frames(validation_images_input)
         resized_frames = resize_frames(frames)
+        
+        io_time = time.time() - io_start
+        print(f"  [4a] I/O (read video/mask/priori): {io_time:.2f}s")
 
         ##############################################
         # DiffuEraser inference
         ##############################################
-        print("DiffuEraser inference...")
+        print("  DiffuEraser inference...")
         if seed is None:
             generator = None
         else:
@@ -342,10 +349,15 @@ class DiffuEraser:
         timesteps = torch.tensor([0], device=self.device)
         timesteps = timesteps.long()
 
+        vae_encode_start = time.time()
         validation_masks_input_ori = copy.deepcopy(validation_masks_input)
         resized_frames_ori = copy.deepcopy(resized_frames)
+        vae_encode_time = time.time() - vae_encode_start
+        print(f"  [4b] VAE encode priori: {vae_encode_time:.2f}s")
+        
         ################  Pre-inference  ################
         if enable_pre_inference and n_total_frames > nframes*2: ## do pre-inference only when number of input frames is larger than nframes*2
+            pre_inference_start = time.time()
             ## sample
             step = n_total_frames / nframes
             sample_index = [int(i * step) for i in range(nframes)]
@@ -392,13 +404,18 @@ class DiffuEraser:
                 validation_masks_input[index] = black_image
                 validation_images_input[index] = images_pre_out[i]
                 resized_frames[index] = images_pre_out[i]
+            
+            pre_inference_time = time.time() - pre_inference_start
+            print(f"  [4c] Pre-inference (keyframe pass): {pre_inference_time:.2f}s")
         else:
             latents_pre_out=None
             sample_index=None
+            print(f"  [4c] Pre-inference: SKIPPED (enable_pre_inference=False)")
         gc.collect()
         torch.cuda.empty_cache()
 
         ################  Frame-by-frame inference  ################
+        main_inference_start = time.time()
         ## add priori
         noisy_latents = self.noise_scheduler.add_noise(latents, noise, timesteps) 
         latents = noisy_latents
@@ -414,11 +431,15 @@ class DiffuEraser:
                 latents=latents,
             ).frames
         images = images[:real_video_length]
+        
+        main_inference_time = time.time() - main_inference_start
+        print(f"  [4d] Main inference ({self.num_inference_steps}-step): {main_inference_time:.2f}s")
 
         gc.collect()
         torch.cuda.empty_cache()
 
         ################ Compose ################
+        compose_start = time.time()
         binary_masks = validation_masks_input_ori
         mask_blurreds = []
         if blended:
@@ -443,6 +464,12 @@ class DiffuEraser:
             img = np.array(comp_frames[f]).astype(np.uint8)
             writer.write(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         writer.release()
+        
+        compose_time = time.time() - compose_start
+        print(f"  [4e] Compositing & write: {compose_time:.2f}s")
+        
+        total_diffueraser_time = time.time() - forward_start
+        print(f"  DiffuEraser total: {total_diffueraser_time:.2f}s")
         ################################
 
         return output_path
