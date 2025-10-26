@@ -34,7 +34,7 @@ def main():
     total_start = time.time()
     
     # Configuration for long.mp4
-    video = "data/examples/long.mp4"
+    video = "data/examples/snail.mp4"
     max_resolution = 1600  # 900p max dimension (900p = 1600x900)
     target_fps = 24.0
     debug = True  # Set to True to enable video compression
@@ -46,7 +46,7 @@ def main():
     
     # Optimization settings
     raft_iter = 6  # Reduce RAFT iterations 
-    enable_pre_inference = False  # Skip DiffuEraser keyframe pass for static captions
+    enable_pre_inference = False  # captions are static mostly, so, we can skip the pre-inference 
 
 
 

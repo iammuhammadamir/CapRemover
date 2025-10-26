@@ -71,7 +71,42 @@ def resize_frames(frames, size=None):
         
     return frames
 
-def read_mask(validation_mask, fps, n_total_frames, img_size, mask_dilation_iter, frames):
+def read_mask(validation_mask, fps, n_total_frames, img_size, mask_dilation_iter, frames, preloaded_masks=None):
+    """Read masks from disk or use pre-loaded masks (in-memory optimization)"""
+    masks = []
+    masked_images = []
+    
+    if preloaded_masks is not None:
+        # Use pre-loaded masks (PIL Images)
+        for idx, mask_pil in enumerate(preloaded_masks[:n_total_frames]):
+            # Convert to grayscale if needed
+            if mask_pil.mode != 'L':
+                mask_pil = mask_pil.convert('L')
+            
+            # Resize if needed
+            if mask_pil.size != img_size:
+                mask_pil = mask_pil.resize(img_size, Image.NEAREST)
+            
+            # Apply dilation operations
+            mask = np.asarray(mask_pil)
+            m = np.array(mask > 0).astype(np.uint8)
+            m = cv2.erode(m,
+                        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                        iterations=1)
+            m = cv2.dilate(m,
+                        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                        iterations=mask_dilation_iter)
+
+            mask = Image.fromarray(m * 255)
+            masks.append(mask)
+
+            masked_image = np.array(frames[idx])*(1-(np.array(mask)[:,:,np.newaxis].astype(np.float32)/255))
+            masked_image = Image.fromarray(masked_image.astype(np.uint8))
+            masked_images.append(masked_image)
+        
+        return masks, masked_images
+    
+    # Original disk-reading logic
     cap = cv2.VideoCapture(validation_mask)
     if not cap.isOpened():
         print("Error: Could not open mask video.")
@@ -81,8 +116,6 @@ def read_mask(validation_mask, fps, n_total_frames, img_size, mask_dilation_iter
         cap.release()
         raise ValueError("The frame rate of all input videos needs to be consistent.")
 
-    masks = []
-    masked_images = []
     idx = 0
     while True:
         ret, frame = cap.read()
@@ -144,7 +177,40 @@ def read_priori(priori, fps, n_total_frames, img_size):
 
     return prioris
 
-def read_video(validation_image, video_length, nframes, max_img_size):
+def read_video(validation_image, video_length, nframes, max_img_size, preloaded_frames=None, preloaded_fps=None):
+    """Read video or use pre-loaded frames (in-memory optimization)"""
+    if preloaded_frames is not None:
+        # Use pre-loaded frames
+        frames = preloaded_frames
+        fps = preloaded_fps if preloaded_fps is not None else 24.0
+        n_total_frames = len(frames)
+        n_clip = int(np.ceil(n_total_frames/nframes))
+        
+        # Continue with size/resize logic
+        max_size = max(frames[0].size)
+        if(max_size<256):
+            raise ValueError("The resolution of the uploaded video must be larger than 256x256.")
+        if(max_size>4096):
+            raise ValueError("The resolution of the uploaded video must be smaller than 4096x4096.")
+        if max_size>max_img_size:
+            ratio = max_size/max_img_size
+            ratio_size = (int(frames[0].size[0]/ratio),int(frames[0].size[1]/ratio))
+            img_size = (ratio_size[0]-ratio_size[0]%8, ratio_size[1]-ratio_size[1]%8)
+            resize_flag=True
+        elif (frames[0].size[0]%8==0) and (frames[0].size[1]%8==0):
+            img_size = frames[0].size
+            resize_flag=False
+        else:
+            ratio_size = frames[0].size
+            img_size = (ratio_size[0]-ratio_size[0]%8, ratio_size[1]-ratio_size[1]%8)
+            resize_flag=True
+        if resize_flag:
+            frames = resize_frames(frames, img_size)
+            img_size = frames[0].size
+
+        return frames, fps, img_size, n_clip, n_total_frames
+    
+    # Original disk-reading logic
     vframes, aframes, info = torchvision.io.read_video(filename=validation_image, pts_unit='sec', end_pts=video_length) # RGB
     fps = info['video_fps']
     # If video_length is None, use actual number of frames from video
@@ -264,7 +330,8 @@ class DiffuEraser:
 
     def forward(self, validation_image, validation_mask, priori, output_path,
                 max_img_size = 1280, video_length=2, mask_dilation_iter=4,
-                nframes=32, seed=None, revision = None, guidance_scale=None, blended=True, enable_pre_inference=True):
+                nframes=32, seed=None, revision = None, guidance_scale=None, blended=True, enable_pre_inference=True,
+                preloaded_video_frames=None, preloaded_video_fps=None, preloaded_mask_frames=None, preloaded_priori_frames=None):
         import time
         forward_start = time.time()
         
@@ -275,15 +342,26 @@ class DiffuEraser:
             raise ValueError("The max_img_size must be larger than 256, smaller than 1920.")
 
         ################ read input video ################
-        io_start = time.time() 
-        frames, fps, img_size, n_clip, n_total_frames = read_video(validation_image, video_length, nframes, max_img_size)
+        io_start = time.time()
+        frames, fps, img_size, n_clip, n_total_frames = read_video(
+            validation_image, video_length, nframes, max_img_size,
+            preloaded_frames=preloaded_video_frames,
+            preloaded_fps=preloaded_video_fps
+        )
         video_len = len(frames)
 
         ################     read mask    ################ 
-        validation_masks_input, validation_images_input = read_mask(validation_mask, fps, video_len, img_size, mask_dilation_iter, frames)
+        validation_masks_input, validation_images_input = read_mask(
+            validation_mask, fps, video_len, img_size, mask_dilation_iter, frames,
+            preloaded_masks=preloaded_mask_frames
+        )
   
         ################    read priori   ################  
-        prioris = read_priori(priori, fps, n_total_frames, img_size)
+        if preloaded_priori_frames is not None:
+            prioris = preloaded_priori_frames[:n_total_frames]
+            prioris = resize_frames(prioris, img_size) if prioris[0].size != img_size else prioris
+        else:
+            prioris = read_priori(priori, fps, n_total_frames, img_size)
 
         ## recheck
         n_total_frames = min(min(len(frames), len(validation_masks_input)), len(prioris))

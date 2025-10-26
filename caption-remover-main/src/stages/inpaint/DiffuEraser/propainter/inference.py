@@ -46,7 +46,18 @@ def resize_frames(frames, size=None):
     return frames, process_size, out_size
 
 #  read frames from video
-def read_frame_from_videos(frame_root, video_length):
+def read_frame_from_videos(frame_root, video_length, preloaded_frames=None, preloaded_fps=None):
+    """Read frames from video or use pre-loaded frames (in-memory optimization)"""
+    if preloaded_frames is not None:
+        # Use pre-loaded frames (in-memory optimization)
+        frames = preloaded_frames
+        fps = preloaded_fps if preloaded_fps is not None else 24.0  # default fps
+        nframes = len(frames)
+        video_name = os.path.basename(frame_root)[:-4] if isinstance(frame_root, str) else "preloaded"
+        size = frames[0].size
+        return frames, fps, size, video_name, nframes
+    
+    # Original disk-reading logic
     if frame_root.endswith(('mp4', 'mov', 'avi', 'MP4', 'MOV', 'AVI')): # input video path
         video_name = os.path.basename(frame_root)[:-4]
         vframes, aframes, info = torchvision.io.read_video(filename=frame_root, pts_unit='sec', end_pts=video_length) # RGB
@@ -74,12 +85,16 @@ def binary_mask(mask, th=0.1):
     return mask
   
 # read frame-wise masks
-def read_mask(mpath, frames_len, size, flow_mask_dilates=8, mask_dilates=5):
+def read_mask(mpath, frames_len, size, flow_mask_dilates=8, mask_dilates=5, preloaded_masks=None):
+    """Read masks from disk or use pre-loaded masks (in-memory optimization)"""
     masks_img = []
     masks_dilated = []
     flow_masks = []
     
-    if mpath.endswith(('jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG')): # input single img path
+    if preloaded_masks is not None:
+        # Use pre-loaded masks (PIL Images, already converted)
+        masks_img = preloaded_masks[:frames_len]
+    elif mpath.endswith(('jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG')): # input single img path
         masks_img = [Image.open(mpath)]
     elif mpath.endswith(('mp4', 'mov', 'avi', 'MP4', 'MOV', 'AVI')): # input video path
         cap = cv2.VideoCapture(mpath)
@@ -174,7 +189,8 @@ class Propainter:
         self.model.eval()
     def forward(self, video, mask, output_path, resize_ratio=0.6, video_length=2, height=-1, width=-1,
                 mask_dilation=4, ref_stride=10, neighbor_length=10, subvideo_length=80,
-                raft_iter=20, save_fps=24, save_frames=False, fp16=True):
+                raft_iter=20, save_fps=24, save_frames=False, fp16=True,
+                preloaded_video_frames=None, preloaded_video_fps=None, preloaded_mask_frames=None):
         
         import time
         forward_start = time.time()
@@ -186,7 +202,11 @@ class Propainter:
 
         ################ read input video ################
         io_start = time.time()
-        frames, fps, size, video_name, nframes = read_frame_from_videos(video, video_length)
+        frames, fps, size, video_name, nframes = read_frame_from_videos(
+            video, video_length, 
+            preloaded_frames=preloaded_video_frames,
+            preloaded_fps=preloaded_video_fps
+        )
         frames = frames[:nframes]
         if not width == -1 and not height == -1:
             size = (width, height)
@@ -203,9 +223,12 @@ class Propainter:
 
         ################ read mask ################ 
         frames_len = len(frames)
-        flow_masks, masks_dilated = read_mask(mask, frames_len, size, 
-                                            flow_mask_dilates=mask_dilation,
-                                            mask_dilates=mask_dilation)
+        flow_masks, masks_dilated = read_mask(
+            mask, frames_len, size, 
+            flow_mask_dilates=mask_dilation,
+            mask_dilates=mask_dilation,
+            preloaded_masks=preloaded_mask_frames
+        )
         flow_masks = flow_masks[:nframes]
         masks_dilated = masks_dilated[:nframes]
         w, h = size

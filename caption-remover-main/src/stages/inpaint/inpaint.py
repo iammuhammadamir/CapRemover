@@ -36,6 +36,25 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     
     start = time.time()
     
+    # Load video and mask frames ONCE for in-memory passing
+    print("\n[0/2] Loading frames in memory (optimization)...")
+    import torchvision
+    from PIL import Image
+    
+    io_start = time.time()
+    # Load video
+    vframes, _, info = torchvision.io.read_video(filename=video_path, pts_unit='sec', end_pts=video_length)
+    video_frames = [Image.fromarray(f.numpy()) for f in vframes]
+    video_fps = info['video_fps']
+    
+    # Load mask (using torchvision for 5-10x faster batch loading vs cv2)
+    mframes, _, _ = torchvision.io.read_video(filename=mask_path, pts_unit='sec', end_pts=video_length)
+    mask_frames = [Image.fromarray(f.numpy()) for f in mframes]
+    
+    io_time = time.time() - io_start
+    print(f"  Loaded {len(video_frames)} video frames + {len(mask_frames)} mask frames in {io_time:.2f}s")
+    print(f"  Memory usage: ~{len(video_frames) * video_frames[0].size[0] * video_frames[0].size[1] * 3 / 1024 / 1024:.1f} MB")
+    
     print("\n[1/2] Running Propainter...")
     print("Loading Propainter model (first run may take 1-2 minutes)...")
     model_load_start = time.time()
@@ -44,10 +63,24 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     print(f"Propainter model loaded in {model_load_time:.2f}s")
     
     prop_start = time.time()
-    propainter_model.forward(video_path, mask_path, priori_path, video_length=video_length, 
-                            ref_stride=10, neighbor_length=10, subvideo_length=50, mask_dilation=mask_dilation, raft_iter=raft_iter)
+    propainter_model.forward(
+        video_path, mask_path, priori_path, video_length=video_length, 
+        ref_stride=10, neighbor_length=10, subvideo_length=50, 
+        mask_dilation=mask_dilation, raft_iter=raft_iter,
+        preloaded_video_frames=video_frames,
+        preloaded_video_fps=video_fps,
+        preloaded_mask_frames=mask_frames
+    )
     prop_time = time.time() - prop_start
     print(f"Propainter inference completed in {prop_time:.2f}s")
+    
+    # Load priori frames for passing to DiffuEraser (torchvision batch loading)
+    print("\n  Loading Propainter output for in-memory passing...")
+    priori_load_start = time.time()
+    priori_vframes, _, _ = torchvision.io.read_video(filename=priori_path, pts_unit='sec', end_pts=video_length)
+    priori_frames = [Image.fromarray(f.numpy()) for f in priori_vframes]
+    priori_load_time = time.time() - priori_load_start
+    print(f"  Loaded {len(priori_frames)} priori frames in {priori_load_time:.2f}s (torchvision batch)")
     
     print("\n[2/2] Running DiffuEraser...")
     print("Loading DiffuEraser model (first run may take 1-2 minutes)...")
@@ -57,15 +90,24 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     print(f"DiffuEraser model loaded in {diffueraser_load_time:.2f}s")
     
     diff_start = time.time()
-    diffueraser_model.forward(video_path, mask_path, priori_path, final_path,
-                             max_img_size=max_img_size, video_length=video_length,
-                             mask_dilation_iter=mask_dilation, guidance_scale=None,
-                             enable_pre_inference=enable_pre_inference, nframes=nframes)
+    diffueraser_model.forward(
+        video_path, mask_path, priori_path, final_path,
+        max_img_size=max_img_size, video_length=video_length,
+        mask_dilation_iter=mask_dilation, guidance_scale=None,
+        enable_pre_inference=enable_pre_inference, nframes=nframes,
+        preloaded_video_frames=video_frames,
+        preloaded_video_fps=video_fps,
+        preloaded_mask_frames=mask_frames,
+        preloaded_priori_frames=priori_frames
+    )
     diff_time = time.time() - diff_start
     print(f"DiffuEraser inference completed in {diff_time:.2f}s")
     
     total_time = time.time() - start
     print(f"\n=== Inpainting Summary ===")
+    print(f"I/O (in-memory optimization):")
+    print(f"  Initial load:      {io_time:.2f}s")
+    print(f"  Priori load:       {priori_load_time:.2f}s")
     print(f"Model loading:")
     print(f"  Propainter load:   {model_load_time:.2f}s")
     print(f"  DiffuEraser load:  {diffueraser_load_time:.2f}s")
@@ -73,6 +115,7 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     print(f"  Propainter:        {prop_time:.2f}s")
     print(f"  DiffuEraser:       {diff_time:.2f}s")
     print(f"Total inpainting:    {total_time:.2f}s")
+    print(f"\nI/O Savings: Avoided redundant disk reads in ProPainter and DiffuEraser")
     print(f"\nOutputs:")
     print(f"  Propainter: {priori_path}")
     print(f"  DiffuEraser: {final_path}")

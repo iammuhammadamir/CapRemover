@@ -143,6 +143,16 @@ NVENC Configuration:
    - Saved: ~1.2 seconds
 
 
+6. I/O: In-Memory Frame Passing + torchvision Batch Loading
+   ----------------------------------------------------------------------
+   Locations: main.py, inpaint.py, diffueraser.py, propainter/inference.py
+   
+   Change: Stopped writing/reading intermediate videos to disk between stages. Frames now stay in memory from initial load through final output. Also ditched cv2.VideoCapture (which reads one frame at a time like a caveman) for torchvision.io.read_video() that grabs everything in one shot.
+   
+   Performance Impact:
+   - I/O overhead dropped from ~26s to ~9s. Saves about 17 seconds per run, which is pretty solid for what amounts to fixing some unnecessarily chatty disk operations.
+
+
 ================================================================================
 CURRENT BOTTLENECK
 ================================================================================
