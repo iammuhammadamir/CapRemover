@@ -9,7 +9,7 @@ from diffueraser.diffueraser import DiffuEraser
 from propainter.inference import Propainter, get_device
 
 
-def run_inpainting(video_path, mask_path, output_dir="data/results", video_length=None, mask_dilation=8, max_img_size=480, raft_iter=12, enable_pre_inference=False):
+def run_inpainting(video_path, mask_path, output_dir="data/results", video_length=None, mask_dilation=8, max_img_size=480, raft_iter=12, enable_pre_inference=False, nframes=22):
     """Run video inpainting using Propainter + DiffuEraser."""
     os.makedirs(output_dir, exist_ok=True)
     priori_path = os.path.join(output_dir, "propainter_result.mp4")
@@ -60,7 +60,7 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     diffueraser_model.forward(video_path, mask_path, priori_path, final_path,
                              max_img_size=max_img_size, video_length=video_length,
                              mask_dilation_iter=mask_dilation, guidance_scale=None,
-                             enable_pre_inference=enable_pre_inference)
+                             enable_pre_inference=enable_pre_inference, nframes=nframes)
     diff_time = time.time() - diff_start
     print(f"DiffuEraser inference completed in {diff_time:.2f}s")
     

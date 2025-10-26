@@ -264,7 +264,7 @@ class DiffuEraser:
 
     def forward(self, validation_image, validation_mask, priori, output_path,
                 max_img_size = 1280, video_length=2, mask_dilation_iter=4,
-                nframes=22, seed=None, revision = None, guidance_scale=None, blended=True, enable_pre_inference=True):
+                nframes=32, seed=None, revision = None, guidance_scale=None, blended=True, enable_pre_inference=True):
         import time
         forward_start = time.time()
         
@@ -344,7 +344,7 @@ class DiffuEraser:
         with torch.no_grad():
             pixel_values = pixel_values.to(dtype=torch.float16)
             latents = []
-            num=4
+            num=8
             for i in range(0, pixel_values.shape[0], num):
                 latents.append(self.vae.encode(pixel_values[i : i + num]).latent_dist.sample())
             latents = torch.cat(latents, dim=0)
