@@ -45,7 +45,7 @@ def main():
     # for long.mp4 use: (230,1300,610,180)
     
     # Optimization settings
-    raft_iter = 12  # Reduce RAFT iterations 
+    raft_iter = 6  # Reduce RAFT iterations 
     enable_pre_inference = False  # Skip DiffuEraser keyframe pass for static captions
 
 
