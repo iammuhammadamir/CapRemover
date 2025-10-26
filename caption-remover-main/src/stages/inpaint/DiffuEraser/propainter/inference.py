@@ -176,12 +176,16 @@ class Propainter:
                 mask_dilation=4, ref_stride=10, neighbor_length=10, subvideo_length=80,
                 raft_iter=20, save_fps=24, save_frames=False, fp16=True):
         
+        import time
+        forward_start = time.time()
+        
         # Use fp16 precision during inference to reduce running memory cost
         use_half = True if fp16 else False 
         if self.device == torch.device('cpu'):
             use_half = False
 
-        ################ read input video ################ 
+        ################ read input video ################
+        io_start = time.time()
         frames, fps, size, video_name, nframes = read_frame_from_videos(video, video_length)
         frames = frames[:nframes]
         if not width == -1 and not height == -1:
@@ -217,14 +221,18 @@ class Propainter:
         flow_masks = to_tensors()(flow_masks).unsqueeze(0)
         masks_dilated = to_tensors()(masks_dilated).unsqueeze(0)
         frames, flow_masks, masks_dilated = frames.to(self.device), flow_masks.to(self.device), masks_dilated.to(self.device)
+        
+        io_time = time.time() - io_start
+        print(f"  [3a] I/O (read video/mask, preprocess): {io_time:.2f}s")
  
         ##############################################
         # ProPainter inference
         ##############################################
         video_length = frames.size(1)
-        print(f'Priori generating: [{video_length} frames]...')
+        print(f'  ProPainter inference: [{video_length} frames]...')
         with torch.no_grad():
             # ---- compute flow ----
+            raft_start = time.time()
             new_longer_edge = max(frames.size(-1), frames.size(-2))
             if new_longer_edge <= 640: 
                 short_clip_len = 12
@@ -257,6 +265,8 @@ class Propainter:
                 torch.cuda.empty_cache()
             torch.cuda.empty_cache()
             gc.collect()
+            raft_time = time.time() - raft_start
+            print(f"  [3b] RAFT optical flow ({raft_iter} iters): {raft_time:.2f}s")
 
             if use_half:
                 frames, flow_masks, masks_dilated = frames.half(), flow_masks.half(), masks_dilated.half()
@@ -265,6 +275,7 @@ class Propainter:
                 self.model = self.model.half()
           
             # ---- complete flow ----
+            flow_complete_start = time.time()
             flow_length = gt_flows_bi[0].size(1)
             if flow_length > subvideo_length:
                 pred_flows_f, pred_flows_b = [], []
@@ -295,6 +306,8 @@ class Propainter:
                 torch.cuda.empty_cache()
             torch.cuda.empty_cache()
             gc.collect()
+            flow_complete_time = time.time() - flow_complete_start
+            print(f"  [3c] Flow completion: {flow_complete_time:.2f}s")
                 
 
             masks_dilated_ori = masks_dilated.clone()
@@ -492,12 +505,18 @@ class Propainter:
 
         ##save composed video##
         comp_frames = [cv2.resize(f, out_size) for f in comp_frames]
+        write_start = time.time()
         writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*"mp4v"),
                                 fps, (comp_frames[0].shape[1],comp_frames[0].shape[0]))
         for f in range(video_length):
             frame = comp_frames[f].astype(np.uint8)
             writer.write(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         writer.release()
+        write_time = time.time() - write_start
+        print(f"  [3d] Video write ({video_length} frames): {write_time:.2f}s")
+        
+        total_propainter_time = time.time() - forward_start
+        print(f"  ProPainter total: {total_propainter_time:.2f}s")
         
         torch.cuda.empty_cache()
 

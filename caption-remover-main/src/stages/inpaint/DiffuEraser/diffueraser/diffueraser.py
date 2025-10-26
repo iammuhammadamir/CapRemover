@@ -330,13 +330,17 @@ class DiffuEraser:
         noise = repeat(noise_pre, "t c h w->(repeat t) c h w", repeat=n_clip)[:real_video_length,...]
         
         ################  prepare priori  ################
+        prep_start = time.time()
         images_preprocessed = []
         for image in prioris:
             image = self.image_processor.preprocess(image, height=tar_height, width=tar_width).to(dtype=torch.float32)
             image = image.to(device=torch.device(self.device), dtype=torch.float16)
             images_preprocessed.append(image)
         pixel_values = torch.cat(images_preprocessed)
+        prep_time = time.time() - prep_start
+        print(f"  [4b] Image preprocessing: {prep_time:.2f}s")
 
+        vae_encode_start = time.time()
         with torch.no_grad():
             pixel_values = pixel_values.to(dtype=torch.float16)
             latents = []
@@ -345,31 +349,43 @@ class DiffuEraser:
                 latents.append(self.vae.encode(pixel_values[i : i + num]).latent_dist.sample())
             latents = torch.cat(latents, dim=0)
         latents = latents * self.vae.config.scaling_factor #[(b f), c1, h, w], c1=4
-        torch.cuda.empty_cache()  
+        torch.cuda.empty_cache()
+        vae_encode_time = time.time() - vae_encode_start
+        print(f"  [4c] VAE encode ({pixel_values.shape[0]} frames, batch={num}): {vae_encode_time:.2f}s")
+        
         timesteps = torch.tensor([0], device=self.device)
         timesteps = timesteps.long()
 
-        vae_encode_start = time.time()
+        copy_start = time.time()
         validation_masks_input_ori = copy.deepcopy(validation_masks_input)
         resized_frames_ori = copy.deepcopy(resized_frames)
-        vae_encode_time = time.time() - vae_encode_start
-        print(f"  [4b] VAE encode priori: {vae_encode_time:.2f}s")
+        copy_time = time.time() - copy_start
+        print(f"  [4d] Deep copy masks/frames: {copy_time:.2f}s")
         
         ################  Pre-inference  ################
         if enable_pre_inference and n_total_frames > nframes*2: ## do pre-inference only when number of input frames is larger than nframes*2
             pre_inference_start = time.time()
+            print(f"  [4e] Pre-inference: Starting keyframe pass...")
+            
             ## sample
+            sampling_start = time.time()
             step = n_total_frames / nframes
             sample_index = [int(i * step) for i in range(nframes)]
             sample_index = sample_index[:22]
             validation_masks_input_pre = [validation_masks_input[i] for i in sample_index]
             validation_images_input_pre = [validation_images_input[i] for i in sample_index]
             latents_pre = torch.stack([latents[i] for i in sample_index])
+            sampling_time = time.time() - sampling_start
+            print(f"    [4e.1] Keyframe sampling ({len(sample_index)} frames): {sampling_time:.2f}s")
 
             ## add proiri
+            noise_start = time.time()
             noisy_latents_pre = self.noise_scheduler.add_noise(latents_pre, noise_pre, timesteps) 
             latents_pre = noisy_latents_pre
+            noise_time = time.time() - noise_start
+            print(f"    [4e.2] Add noise: {noise_time:.2f}s")
 
+            unet_start = time.time()
             with torch.no_grad():
                 latents_pre_out = self.pipeline(
                     num_frames=nframes, 
@@ -381,8 +397,11 @@ class DiffuEraser:
                     guidance_scale=guidance_scale_final,
                     latents=latents_pre,
                 ).latents
-            torch.cuda.empty_cache()  
+            torch.cuda.empty_cache()
+            unet_time = time.time() - unet_start
+            print(f"    [4e.3] UNet+BrushNet inference ({self.num_inference_steps} steps): {unet_time:.2f}s")
 
+            decode_start = time.time()
             def decode_latents(latents, weight_dtype):
                 latents = 1 / self.vae.config.scaling_factor * latents
                 video = []
@@ -395,30 +414,42 @@ class DiffuEraser:
             with torch.no_grad():
                 video_tensor_temp = decode_latents(latents_pre_out, weight_dtype=torch.float16)
                 images_pre_out  = self.image_processor.postprocess(video_tensor_temp, output_type="pil")
-            torch.cuda.empty_cache()  
+            torch.cuda.empty_cache()
+            decode_time = time.time() - decode_start
+            print(f"    [4e.4] VAE decode ({latents_pre_out.shape[0]} frames): {decode_time:.2f}s")
 
             ## replace input frames with updated frames
+            replace_start = time.time()
             black_image = Image.new('L', validation_masks_input[0].size, color=0)
             for i,index in enumerate(sample_index):
                 latents[index] = latents_pre_out[i]
                 validation_masks_input[index] = black_image
                 validation_images_input[index] = images_pre_out[i]
                 resized_frames[index] = images_pre_out[i]
+            replace_time = time.time() - replace_start
+            print(f"    [4e.5] Replace frames in buffer: {replace_time:.2f}s")
             
             pre_inference_time = time.time() - pre_inference_start
-            print(f"  [4c] Pre-inference (keyframe pass): {pre_inference_time:.2f}s")
+            print(f"  [4e] Pre-inference TOTAL: {pre_inference_time:.2f}s")
         else:
             latents_pre_out=None
             sample_index=None
-            print(f"  [4c] Pre-inference: SKIPPED (enable_pre_inference=False)")
+            print(f"  [4e] Pre-inference: SKIPPED (enable_pre_inference=False)")
         gc.collect()
         torch.cuda.empty_cache()
 
         ################  Frame-by-frame inference  ################
         main_inference_start = time.time()
+        print(f"  [4f] Main inference: Starting full video pass...")
+        
         ## add priori
+        noise_add_start = time.time()
         noisy_latents = self.noise_scheduler.add_noise(latents, noise, timesteps) 
         latents = noisy_latents
+        noise_add_time = time.time() - noise_add_start
+        print(f"    [4f.1] Add noise to {latents.shape[0]} frames: {noise_add_time:.2f}s")
+        
+        pipeline_start = time.time()
         with torch.no_grad():
             images = self.pipeline(
                 num_frames=nframes, 
@@ -431,15 +462,20 @@ class DiffuEraser:
                 latents=latents,
             ).frames
         images = images[:real_video_length]
+        pipeline_time = time.time() - pipeline_start
+        print(f"    [4f.2] UNet+BrushNet+VAE pipeline ({self.num_inference_steps} steps, {latents.shape[0]} frames): {pipeline_time:.2f}s")
         
         main_inference_time = time.time() - main_inference_start
-        print(f"  [4d] Main inference ({self.num_inference_steps}-step): {main_inference_time:.2f}s")
+        print(f"  [4f] Main inference TOTAL: {main_inference_time:.2f}s")
 
         gc.collect()
         torch.cuda.empty_cache()
 
         ################ Compose ################
         compose_start = time.time()
+        print(f"  [4g] Compositing: Blending inpainted frames with original...")
+        
+        blur_start = time.time()
         binary_masks = validation_masks_input_ori
         mask_blurreds = []
         if blended:
@@ -449,14 +485,20 @@ class DiffuEraser:
                 binary_mask = 1-(1-np.array(binary_masks[i])/255.) * (1-mask_blurred)
                 mask_blurreds.append(Image.fromarray((binary_mask*255).astype(np.uint8)))
             binary_masks = mask_blurreds
+        blur_time = time.time() - blur_start
+        print(f"    [4g.1] Mask blurring ({len(binary_masks)} frames): {blur_time:.2f}s")
         
+        blend_start = time.time()
         comp_frames = []
         for i in range(len(images)):
             mask = np.expand_dims(np.array(binary_masks[i]),2).repeat(3, axis=2).astype(np.float32)/255.
             img = (np.array(images[i]).astype(np.uint8) * mask \
                 + np.array(resized_frames_ori[i]).astype(np.uint8) * (1 - mask)).astype(np.uint8)
             comp_frames.append(Image.fromarray(img))
+        blend_time = time.time() - blend_start
+        print(f"    [4g.2] Frame blending ({len(images)} frames): {blend_time:.2f}s")
 
+        write_start = time.time()
         default_fps = fps
         writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*"mp4v"),
                             default_fps, comp_frames[0].size)
@@ -464,9 +506,11 @@ class DiffuEraser:
             img = np.array(comp_frames[f]).astype(np.uint8)
             writer.write(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         writer.release()
+        write_time = time.time() - write_start
+        print(f"    [4g.3] Video encoding ({real_video_length} frames): {write_time:.2f}s")
         
         compose_time = time.time() - compose_start
-        print(f"  [4e] Compositing & write: {compose_time:.2f}s")
+        print(f"  [4g] Compositing TOTAL: {compose_time:.2f}s")
         
         total_diffueraser_time = time.time() - forward_start
         print(f"  DiffuEraser total: {total_diffueraser_time:.2f}s")

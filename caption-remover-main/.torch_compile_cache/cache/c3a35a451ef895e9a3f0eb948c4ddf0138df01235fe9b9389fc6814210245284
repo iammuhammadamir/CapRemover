@@ -1,0 +1,33 @@
+{
+    "system": {
+        "device": {
+            "name": "NVIDIA RTX 6000 Ada Generation"
+        },
+        "version": {
+            "cuda": "11.8",
+            "triton": "2.3.1"
+        },
+        "hash": "c3a35a451ef895e9a3f0eb948c4ddf0138df01235fe9b9389fc6814210245284"
+    },
+    "cache": {
+        "((torch.Size([1, 320]), (320, 1), torch.float16), (torch.Size([320, 1280]), (1, 320), torch.float16), <OpOverloadPacket(op='aten.addmm')>, (torch.Size([1280]), (1,), torch.float16), None)": false,
+        "((torch.Size([22, 64]), (64, 1), torch.float16), (torch.Size([64, 320]), (1, 64), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([22, 1280]), (1280, 1), torch.float16), (torch.Size([1280, 64]), (1, 1280), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([22, 1280]), (1280, 1), torch.float16), (torch.Size([1280, 320]), (1, 1280), torch.float16), <OpOverloadPacket(op='aten.addmm')>, (torch.Size([320]), (1,), torch.float16), None)": false,
+        "((torch.Size([1694, 64]), (64, 1), torch.float16), (torch.Size([64, 320]), (1, 64), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([1694, 768]), (768, 1), torch.float16), (torch.Size([768, 64]), (1, 768), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([1694, 768]), (768, 1), torch.float16), (torch.Size([768, 320]), (1, 768), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([2700, 22, 320]), (1, 2700, 59400), torch.float16), (torch.Size([2700, 320, 320]), (0, 1, 320), torch.float16), <OpOverloadPacket(op='aten.bmm')>, None, None)": false,
+        "((torch.Size([22, 64]), (64, 1), torch.float16), (torch.Size([64, 640]), (1, 64), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([22, 1280]), (1280, 1), torch.float16), (torch.Size([1280, 640]), (1, 1280), torch.float16), <OpOverloadPacket(op='aten.addmm')>, (torch.Size([640]), (1,), torch.float16), None)": false,
+        "((torch.Size([1694, 64]), (64, 1), torch.float16), (torch.Size([64, 640]), (1, 64), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([1694, 768]), (768, 1), torch.float16), (torch.Size([768, 640]), (1, 768), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([s1*s2, 22, 640]), (1, s1*s2, 22*s1*s2), torch.float16), (torch.Size([s1*s2, 640, 640]), (0, 1, 640), torch.float16), <OpOverloadPacket(op='aten.bmm')>, None, None)": false,
+        "((torch.Size([22, 64]), (64, 1), torch.float16), (torch.Size([64, 1280]), (1, 64), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([22, 1280]), (1280, 1), torch.float16), (torch.Size([1280, 1280]), (1, 1280), torch.float16), <OpOverloadPacket(op='aten.addmm')>, (torch.Size([1280]), (1,), torch.float16), None)": false,
+        "((torch.Size([1694, 64]), (64, 1), torch.float16), (torch.Size([64, 1280]), (1, 64), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([1694, 768]), (768, 1), torch.float16), (torch.Size([768, 1280]), (1, 768), torch.float16), <OpOverloadPacket(op='aten.mm')>, None, None)": false,
+        "((torch.Size([s1*s2, 22, 1280]), (1, s1*s2, 22*s1*s2), torch.float16), (torch.Size([s1*s2, 1280, 1280]), (0, 1, 1280), torch.float16), <OpOverloadPacket(op='aten.bmm')>, None, None)": false,
+        "((torch.Size([s1*s2, 22, 320]), (1, s1*s2, 22*s1*s2), torch.float16), (torch.Size([s1*s2, 320, 320]), (0, 1, 320), torch.float16), <OpOverloadPacket(op='aten.bmm')>, None, None)": false
+    }
+}
