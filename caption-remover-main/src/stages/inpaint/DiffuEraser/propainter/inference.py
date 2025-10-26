@@ -215,10 +215,15 @@ class Propainter:
         if(longer_edge > MaxSideThresh): 
             scale = MaxSideThresh / longer_edge
             resize_ratio = resize_ratio * scale
-        if not resize_ratio == 1.0:
-            size = (int(resize_ratio * size[0]), int(resize_ratio * size[1]))
-
-        frames, size, out_size = resize_frames(frames, size)
+        
+        # Only resize if needed
+        target_size = (int(resize_ratio * size[0]), int(resize_ratio * size[1])) if resize_ratio != 1.0 else size
+        current_size = frames[0].size
+        if current_size != target_size:
+            frames, size, out_size = resize_frames(frames, target_size)
+        else:
+            size = current_size
+            out_size = current_size
         fps = save_fps if fps is None else fps
 
         ################ read mask ################ 
@@ -239,14 +244,17 @@ class Propainter:
         flow_masks = flow_masks[:frames_len]
         masks_dilated = masks_dilated[:frames_len]
         
+        # Batch convert to numpy (faster than list comprehension)
         ori_frames_inp = [np.array(f).astype(np.uint8) for f in frames]
+        
+        # Tensor conversion (already efficient with to_tensors batch operation)
         frames = to_tensors()(frames).unsqueeze(0) * 2 - 1    
         flow_masks = to_tensors()(flow_masks).unsqueeze(0)
         masks_dilated = to_tensors()(masks_dilated).unsqueeze(0)
         frames, flow_masks, masks_dilated = frames.to(self.device), flow_masks.to(self.device), masks_dilated.to(self.device)
         
         io_time = time.time() - io_start
-        print(f"  [3a] I/O (read video/mask, preprocess): {io_time:.2f}s")
+        print(f"  [3a] Preprocessing (resize+tensor+GPU): {io_time:.2f}s")
  
         ##############################################
         # ProPainter inference

@@ -34,7 +34,7 @@ def main():
     total_start = time.time()
     
     # Configuration for long.mp4
-    video = "data/examples/snail.mp4"
+    video = "data/examples/long.mp4"
     max_resolution = 1600  # 900p max dimension (900p = 1600x900)
     target_fps = 24.0
     debug = True  # Set to True to enable video compression

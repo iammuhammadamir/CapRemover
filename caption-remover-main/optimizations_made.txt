@@ -153,6 +153,39 @@ NVENC Configuration:
    - I/O overhead dropped from ~26s to ~9s. Saves about 17 seconds per run, which is pretty solid for what amounts to fixing some unnecessarily chatty disk operations.
 
 
+7. VAE Batch Size Optimization (Encode + Decode)
+   ----------------------------------------------------------------------
+   Locations: 
+   - diffueraser/diffueraser.py (line 434)
+   - diffueraser/pipeline_diffueraser.py (lines 452-456, 1140)
+   - diffueraser/pipeline_diffueraser_stage1.py (lines 420-424)
+   - diffueraser/pipeline_diffueraser_stage2.py (lines 422-426)
+   
+   Changes:
+   a) VAE Encode: Increased batch size from 8 → 32 (4x larger)
+      - Before: 854 frames ÷ 8 = 107 batches
+      - After: 854 frames ÷ 32 = 27 batches
+   
+   b) VAE Decode: Changed from 1 frame at a time → 16 frames per batch
+      - Before: 854 individual decode calls
+      - After: 854 ÷ 16 = 54 batches
+      - Applied to all 3 pipeline variants (main, stage1, stage2)
+   
+   c) Conditioning Latents: Increased batch size from 4 → 16
+      - Used during main inference for masked image encoding
+   
+   Why This Works:
+   - H100 has 96GB VRAM but was barely using it (batch=8 is tiny)
+   - VAE operations are memory-bound, not compute-bound
+   - Larger batches = better GPU utilization + fewer Python loop iterations
+   
+   Expected Performance Impact:
+   - VAE encode: 10.62s → ~5-6s (save ~5-6s)
+   - VAE decode in main inference: ~15-20s → ~5-7s (save ~10-13s)
+   - Conditioning latents: ~3-4s → ~1-2s (save ~2s)
+   - Total Expected Savings: ~17-21 seconds
+
+
 ================================================================================
 CURRENT BOTTLENECK
 ================================================================================

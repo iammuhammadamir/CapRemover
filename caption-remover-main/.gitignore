@@ -60,3 +60,8 @@ logs/
 
 
 .torch_compile_cache/
+
+# Files containing secrets/credentials
+**/setup-project.sh
+setup-project.sh
+DOCKER-USAGE.txt

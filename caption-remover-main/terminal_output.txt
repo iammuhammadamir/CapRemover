@@ -3,49 +3,58 @@
 ============================================================
 video_adjustment.adjust_resolution_and_fps: NVENC unavailable, falling back to CPU encoding
 
-Processed video: data/examples/snail_preprocessed.mp4
+Processed video: data/examples/long_preprocessed.mp4
 Resolution: 900x1600, FPS: 24.0
-✓ Preprocessing completed in 3.18s
+✓ Preprocessing completed in 4.35s
 
 ============================================================
 [2/5] CREATING MASK
 ============================================================
 ROI preview saved to: data/results/roi_preview.png
-mask.create_mask_video: Creating mask from video: data/examples/snail_preprocessed.mp4
+mask.create_mask_video: Creating mask from video: data/examples/long_preprocessed.mp4
 mask.create_mask_video: 🚀 OPTIMIZATION ENABLED - Processing only even frames (50% OCR reduction)
 mask.create_mask_video: Initializing video reader...
-mask.create_mask_video: Video info: 854 frames, 24.00 fps, 900x1600
+mask.create_mask_video: Video info: 1339 frames, 24.00 fps, 900x1600
 mask.create_mask_video: Initializing OCR model...
 mask.create_mask_video: Settings: MODEL=PP-OCRv5_server_det, DEBUG=True, BATCH_SIZE=32, LIMIT_SIDE_LEN=1024, UNCLIP_RATIO=2.5, MASK_DILATION=10, ROI=(191, 1083, 508, 150)
 mask.create_mask_video: Phase 1 - Processing even frames through OCR (batch size: 32)...
-mask.create_mask_video: Progress (even frames): 427/427 frames (41.03 fps)
-mask.create_mask_video: Phase 1 completed in 9.06s
+mask.create_mask_video: Progress (even frames): 480/670 frames (45.66 fps)
+mask.create_mask_video: Progress (even frames): 670/670 frames (44.77 fps)
+mask.create_mask_video: Phase 1 completed in 13.60s
 mask.create_mask_video: Phase 2 - Interpolating odd frames and writing video...
-mask.create_mask_video: Writing progress: 60/854 frames
-mask.create_mask_video: Writing progress: 120/854 frames
-mask.create_mask_video: Writing progress: 180/854 frames
-mask.create_mask_video: Writing progress: 240/854 frames
-mask.create_mask_video: Writing progress: 300/854 frames
-mask.create_mask_video: Writing progress: 360/854 frames
-mask.create_mask_video: Writing progress: 420/854 frames
-mask.create_mask_video: Writing progress: 480/854 frames
-mask.create_mask_video: Writing progress: 540/854 frames
-mask.create_mask_video: Writing progress: 600/854 frames
-mask.create_mask_video: Writing progress: 660/854 frames
-mask.create_mask_video: Writing progress: 720/854 frames
-mask.create_mask_video: Writing progress: 780/854 frames
-mask.create_mask_video: Writing progress: 840/854 frames
-mask.create_mask_video: Writing progress: 854/854 frames
+mask.create_mask_video: Writing progress: 60/1339 frames
+mask.create_mask_video: Writing progress: 120/1339 frames
+mask.create_mask_video: Writing progress: 180/1339 frames
+mask.create_mask_video: Writing progress: 240/1339 frames
+mask.create_mask_video: Writing progress: 300/1339 frames
+mask.create_mask_video: Writing progress: 360/1339 frames
+mask.create_mask_video: Writing progress: 420/1339 frames
+mask.create_mask_video: Writing progress: 480/1339 frames
+mask.create_mask_video: Writing progress: 540/1339 frames
+mask.create_mask_video: Writing progress: 600/1339 frames
+mask.create_mask_video: Writing progress: 660/1339 frames
+mask.create_mask_video: Writing progress: 720/1339 frames
+mask.create_mask_video: Writing progress: 780/1339 frames
+mask.create_mask_video: Writing progress: 840/1339 frames
+mask.create_mask_video: Writing progress: 900/1339 frames
+mask.create_mask_video: Writing progress: 960/1339 frames
+mask.create_mask_video: Writing progress: 1020/1339 frames
+mask.create_mask_video: Writing progress: 1080/1339 frames
+mask.create_mask_video: Writing progress: 1140/1339 frames
+mask.create_mask_video: Writing progress: 1200/1339 frames
+mask.create_mask_video: Writing progress: 1260/1339 frames
+mask.create_mask_video: Writing progress: 1320/1339 frames
+mask.create_mask_video: Writing progress: 1339/1339 frames
 
 mask.create_mask_video: === Summary ===
-mask.create_mask_video: Total frames: 854
-mask.create_mask_video: Even frames processed (OCR): 427
-mask.create_mask_video: Odd frames interpolated (union): 427
-mask.create_mask_video: OCR processing time: 9.06s
-mask.create_mask_video: Interpolation + writing time: 6.58s
-mask.create_mask_video: Total time: 16.99s (50.25 fps)
-mask.create_mask_video: Total text detections (even frames only): 1
-mask.create_mask_video: Average detections per even frame: 0.00
+mask.create_mask_video: Total frames: 1339
+mask.create_mask_video: Even frames processed (OCR): 670
+mask.create_mask_video: Odd frames interpolated (union): 669
+mask.create_mask_video: OCR processing time: 13.60s
+mask.create_mask_video: Interpolation + writing time: 11.13s
+mask.create_mask_video: Total time: 26.10s (51.30 fps)
+mask.create_mask_video: Total text detections (even frames only): 830
+mask.create_mask_video: Average detections per even frame: 1.24
 mask.create_mask_video: ✓ Text detection successful!
 
 mask.create_mask_video: Output files:
@@ -54,7 +63,7 @@ mask.create_mask_video:   Overlay video: data/results/overlay_video.mp4
 mask.create_mask_video:   Note: Green overlay = OCR detected, Yellow overlay = Interpolated
 
 Mask video: data/results/mask_video.mp4
-✓ Mask creation completed in 17.08s
+✓ Mask creation completed in 26.33s
 
 ============================================================
 [3/5] CROPPING TO 2X ROI REGION
@@ -72,7 +81,7 @@ video_adjustment.crop_video_to_roi: NVENC unavailable, falling back to CPU encod
 
 Cropped video: data/results/video_cropped_2x_roi.mp4
 Cropped mask: data/results/mask_cropped_2x_roi.mp4
-✓ Cropping completed in 2.02s
+✓ Cropping completed in 2.80s
 
 ============================================================
 [4/5] INPAINTING (2X ROI REGION)
@@ -84,56 +93,56 @@ Input mask: data/results/mask_cropped_2x_roi.mp4
 Using device: cuda
 
 [0/2] Loading frames in memory (optimization)...
-  Loaded 854 video frames + 854 mask frames in 1.60s
-  Memory usage: ~659.7 MB
+  Loaded 1339 video frames + 1339 mask frames in 2.39s
+  Memory usage: ~1034.3 MB
 
 [1/2] Running Propainter...
 Loading Propainter model (first run may take 1-2 minutes)...
-Propainter model loaded in 0.37s
-  [3a] I/O (read video/mask, preprocess): 4.18s
-  ProPainter inference: [854 frames]...
-  [3b] RAFT optical flow (6 iters): 6.53s
-  [3c] Flow completion: 2.42s
-  [3d] Video write (854 frames): 0.29s
-  ProPainter total: 29.28s
-Propainter inference completed in 29.29s
+Propainter model loaded in 0.35s
+  [3a] Preprocessing (resize+tensor+GPU): 6.73s
+  ProPainter inference: [1339 frames]...
+  [3b] RAFT optical flow (6 iters): 9.88s
+  [3c] Flow completion: 3.59s
+  [3d] Video write (1339 frames): 0.43s
+  ProPainter total: 47.75s
+Propainter inference completed in 47.77s
 
   Loading Propainter output for in-memory passing...
-  Loaded 854 priori frames in 0.18s (torchvision batch)
+  Loaded 1339 priori frames in 0.27s (torchvision batch)
 
 [2/2] Running DiffuEraser...
 Loading DiffuEraser model (first run may take 1-2 minutes)...
 DiffuEraser.__init__: xFormers not available (Refer to https://github.com/facebookresearch/xformers for more information on how to install xformers), using default attention (PyTorch 2.0+ will use SDPA)
-DiffuEraser model loaded in 2.26s
-  [4a] I/O (read video/mask/priori): 5.24s
+DiffuEraser model loaded in 2.20s
+  [4a] Preprocessing (load+resize): 8.03s
   DiffuEraser inference...
-  [4b] Image preprocessing (854 frames, vectorized): 1.13s
-  [4c] VAE encode (854 frames, batch=8): 10.62s
+  [4b] Image preprocessing (1339 frames, vectorized): 2.39s
+  [4c] VAE encode (1339 frames, batch=32): 17.02s
   [4d] Shallow copy optimization (deep copy skipped)
   [4e] Pre-inference: SKIPPED (enable_pre_inference=False)
   [4f] Main inference: Starting full video pass...
-    [4f.1] Add noise to 854 frames: 0.00s
-    [4f.2] UNet+BrushNet+VAE pipeline (2 steps, 854 frames): 72.73s
-  [4f] Main inference TOTAL: 72.74s
+    [4f.1] Add noise to 1339 frames: 0.00s
+    [4f.2] UNet+BrushNet+VAE pipeline (2 steps, 1339 frames): 117.02s
+  [4f] Main inference TOTAL: 117.02s
   [4g] Compositing: Blending inpainted frames with original...
-    [4g.1] Mask blurring (854 frames): 0.62s
-    [4g.2] Frame blending (854 frames): 0.76s
-    [4g.3] Video encoding (854 frames): 0.55s
-  [4g] Compositing TOTAL: 1.93s
-  DiffuEraser total: 92.17s
-DiffuEraser inference completed in 92.18s
+    [4g.1] Mask blurring (1339 frames): 0.98s
+    [4g.2] Frame blending (1339 frames): 1.25s
+    [4g.3] Video encoding (1339 frames): 0.84s
+  [4g] Compositing TOTAL: 3.07s
+  DiffuEraser total: 148.14s
+DiffuEraser inference completed in 148.20s
 
 === Inpainting Summary ===
 I/O (in-memory optimization):
-  Initial load:      1.60s
-  Priori load:       0.18s
+  Initial load:      2.39s
+  Priori load:       0.27s
 Model loading:
-  Propainter load:   0.37s
-  DiffuEraser load:  2.26s
+  Propainter load:   0.35s
+  DiffuEraser load:  2.20s
 Inference:
-  Propainter:        29.29s
-  DiffuEraser:       92.18s
-Total inpainting:    125.89s
+  Propainter:        47.77s
+  DiffuEraser:       148.20s
+Total inpainting:    201.18s
 
 I/O Savings: Avoided redundant disk reads in ProPainter and DiffuEraser
 
@@ -157,26 +166,26 @@ composite._composite_single: NVENC unavailable, falling back to CPU encoding
 Compositing DiffuEraser result...
 composite._composite_single: NVENC unavailable, falling back to CPU encoding
 ✓ DiffuEraser composited: data/results/diffueraser_composited.mp4
-✓ Compositing completed in 5.02s
+✓ Compositing completed in 7.44s
 
 ============================================================
 [6/6] COMPRESSING VIDEOS
 ============================================================
-✓ Video compression completed in 18.65s
+✓ Video compression completed in 29.87s
 
 ============================================================
 PIPELINE COMPLETE
 ============================================================
 
 ⏱️  TIMING BREAKDOWN:
-  [1] Preprocessing:    3.18s
-  [2] Mask creation:   17.08s
-  [3] ROI Cropping:     2.02s
-  [4] Inpainting:     125.91s
-  [5] Compositing:      5.02s
-  [6] Compression:     18.65s
+  [1] Preprocessing:    4.35s
+  [2] Mask creation:   26.33s
+  [3] ROI Cropping:     2.80s
+  [4] Inpainting:     201.20s
+  [5] Compositing:      7.44s
+  [6] Compression:     29.87s
   -----------------------------------
-  TOTAL TIME:        171.99s (2.9 min)
+  TOTAL TIME:        272.11s (4.5 min)
 
 📁 INTERMEDIATE FILES:
   • Cropped video:   data/results/video_cropped_2x_roi.mp4

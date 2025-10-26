@@ -417,8 +417,11 @@ class StableDiffusionDiffuEraserPipelineStageOne(
     def decode_latents(self, latents, weight_dtype):
         latents = 1 / self.vae.config.scaling_factor * latents
         video = []
-        for t in range(latents.shape[0]):
-            video.append(self.vae.decode(latents[t:t+1, ...].to(weight_dtype)).sample)
+        # Batch decode for efficiency (was 1 frame at a time, now 16 frames)
+        batch_size = 16
+        for t in range(0, latents.shape[0], batch_size):
+            batch_end = min(t + batch_size, latents.shape[0])
+            video.append(self.vae.decode(latents[t:batch_end, ...].to(weight_dtype)).sample)
         video = torch.concat(video, dim=0)
         
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
