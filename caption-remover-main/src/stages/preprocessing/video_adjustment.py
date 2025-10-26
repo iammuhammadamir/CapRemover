@@ -34,27 +34,38 @@ def adjust_resolution_and_fps(
     if not filters:
         return
 
-    # Use H.265 encoding for better compression
+    # Use GPU-accelerated NVENC encoding for maximum speed on intermediate file
+    # Falls back to CPU ultrafast if NVENC unavailable
     cmd = [
         "ffmpeg",
         "-y",
+        "-hwaccel", "cuda",  # Enable CUDA hardware acceleration
         "-i",
         video_path,
         "-vf",
         ",".join(filters),
         "-c:v",
-        "libx265",
-        "-preset",
-        "medium",
-        "-crf",
-        "23",
+        "h264_nvenc",  # NVIDIA GPU encoder (much faster than CPU)
+        "-preset", "p4",  # NVENC preset: p4 = balanced speed/quality
+        "-cq", "28",  # Constant quality mode (similar to CRF)
         "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
+        "copy",  # Don't re-encode audio (faster)
         output_path,
     ]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        # Fallback to CPU encoding if NVENC fails
+        print(f"video_adjustment.adjust_resolution_and_fps: NVENC unavailable, falling back to CPU encoding")
+        cmd_fallback = [
+            "ffmpeg", "-y", "-i", video_path,
+            "-vf", ",".join(filters),
+            "-c:v", "libx265", "-preset", "ultrafast", "-crf", "23",
+            "-c:a", "aac", "-b:a", "128k",
+            output_path,
+        ]
+        subprocess.run(cmd_fallback, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def downscale_video(
@@ -164,24 +175,36 @@ def crop_video_to_roi(
     print(f"Crop region: ({crop_x}, {crop_y}, {crop_w}, {crop_h})")
     print(f"New ROI in cropped coords: {new_roi}")
     
-    # Crop using ffmpeg
+    # Crop using GPU-accelerated NVENC encoding for speed
     cmd = [
         "ffmpeg",
         "-y",
+        "-hwaccel", "cuda",
         "-i",
         video_path,
         "-vf",
         f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y}",
         "-c:v",
-        "libx265",
-        "-preset",
-        "fast",
-        "-crf",
-        "23",
+        "h264_nvenc",
+        "-preset", "p4",
+        "-cq", "28",
         "-c:a",
         "copy",
         output_path,
     ]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        # Fallback to CPU encoding if NVENC fails
+        print(f"video_adjustment.crop_video_to_roi: NVENC unavailable, falling back to CPU encoding")
+        cmd_fallback = [
+            "ffmpeg", "-y", "-i", video_path,
+            "-vf", f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y}",
+            "-c:v", "libx265", "-preset", "ultrafast", "-crf", "23",
+            "-c:a", "copy",
+            output_path,
+        ]
+        subprocess.run(cmd_fallback, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     return output_path, new_roi

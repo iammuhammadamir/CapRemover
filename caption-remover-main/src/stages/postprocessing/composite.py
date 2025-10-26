@@ -107,15 +107,35 @@ def _composite_single(
     """
     cmd = [
         "ffmpeg",
+        "-hwaccel", "cuda",
         "-i", base_video,
         "-i", overlay_video,
         "-filter_complex",
         f"[1:v]scale={target_w}:{target_h}[scaled];[0:v][scaled]overlay={overlay_x}:{overlay_y}",
+        "-c:v", "h264_nvenc",
+        "-preset", "p4",
+        "-cq", "28",
         "-c:a", "copy",
         "-y",
         output_path
     ]
     
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        # Fallback to CPU encoding if NVENC fails
+        print(f"composite._composite_single: NVENC unavailable, falling back to CPU encoding")
+        cmd_fallback = [
+            "ffmpeg",
+            "-i", base_video,
+            "-i", overlay_video,
+            "-filter_complex",
+            f"[1:v]scale={target_w}:{target_h}[scaled];[0:v][scaled]overlay={overlay_x}:{overlay_y}",
+            "-c:v", "libx265", "-preset", "ultrafast", "-crf", "23",
+            "-c:a", "copy",
+            "-y",
+            output_path
+        ]
+        subprocess.run(cmd_fallback, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
