@@ -6,10 +6,10 @@ def composite_inpainted_region(
     preprocessed_video: str,
     roi: tuple[int, int, int, int],
     propainter_result: str,
-    diffueraser_result: str,
+    diffueraser_result: str | None,
     output_dir: str = "data/results",
     expansion_factor: float = 2.0
-) -> tuple[str, str]:
+) -> tuple[str, str | None]:
     """
     Composite the inpainted results back onto the preprocessed video.
     
@@ -77,6 +77,11 @@ def composite_inpainted_region(
     )
     print(f"✓ Propainter composited: {propainter_composited}")
     
+    # Skip DiffuEraser if not provided (propainter_only mode)
+    if diffueraser_result is None:
+        print(f"\n⚠️  Skipping DiffuEraser composite (propainter_only mode)")
+        return propainter_composited, None
+    
     # Composite DiffuEraser
     print(f"\nCompositing DiffuEraser result...")
     _composite_single(
@@ -119,7 +124,7 @@ def _composite_single(
         "-y",
         output_path
     ]
-    
+     
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
@@ -131,7 +136,7 @@ def _composite_single(
             "-i", overlay_video,
             "-filter_complex",
             f"[1:v]scale={target_w}:{target_h}[scaled];[0:v][scaled]overlay={overlay_x}:{overlay_y}",
-            "-c:v", "libx265", "-preset", "ultrafast", "-crf", "23",
+            "-c:v", "libx265", "-preset", "medium", "-crf", "23",
             "-c:a", "copy",
             "-y",
             output_path

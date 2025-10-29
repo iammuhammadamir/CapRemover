@@ -1,0 +1,87 @@
+
+
+
+Hey Kush, just wrote the following document to make sure you are aware of the changes made. There's no serious trade-off in these optimizations. 
+
+
+Current Optimized Performance (H100 GPU, 55s video):
+Total time: around 300–310 seconds (about 5 minutes)
+
+Inference time reduced by around 55%
+
+
+OPTIMIZATIONS IMPLEMENTED
+
+1. MASK CREATION: Even-Frame OCR with Interpolation (win-win)
+
+Changed the OCR step to only run on even-numbered frames
+Odd frames just reuse results via interpolation using a bitwise union of nearby even frames.
+This cuts decoding and OCR work roughly in half and keeps masks consistent between frames.
+
+Note: another change we can make is switching to mobile version of the model which is lighter and I think would be fine to use
+
+
+
+
+2. VIDEO ENCODING: NVENC GPU Acceleration (win-win)
+
+Switched from CPU-based video encoding (libx265) to NVIDIA’s NVENC GPU encoder (h264_nvenc).
+If NVENC isn’t available, it automatically falls back to CPU encoding.
+This makes all video processing faster since encoding moves to the GPU and frees up the CPU.
+
+
+
+
+3. VIDEO ENCODING: Fast Preset Optimization if NVENC not available (win-win)
+
+When the GPU encoder isn’t available, the FFmpeg preset now uses "ultrafast" instead of "medium".
+This prioritizes speed over compression, which is fine for temporary intermediate files. The final composited file still uses the same "medium" 
+
+
+
+4. DIFFUERASER: Increased Processing Batch Size (win-win)
+
+Location: src/stages/inpaint/DiffuEraser/diffueraser/diffueraser.py
+Increased the nframes parameter from 22 to 32 for H100 GPUs.
+This means the model processes more frames per batch, leading to fewer chunks and better GPU utilization.
+
+
+
+5. DIFFUERASER: Vectorized Image Preprocessing (win-win)
+
+Instead of converting each frame to the GPU one by one, all frames are now batched and sent together.
+Removes a lot of Python overhead and makes data transfers faster.
+
+
+
+6. DIFFUERASER: Shallow Copy Optimization (win-win)
+
+Switched from deep copying frames and masks to shallow references.
+Safe because they’re only read, not modified.
+Removes unnecessary memory duplication.
+
+
+
+7. I/O: In-Memory Frame Passing + torchvision Batch Loading (win-win)
+
+Stopped writing temporary videos to disk between stages.
+Frames now stay in memory all the way through.
+Also replaced cv2.VideoCapture with torchvision.io.read_video() which loads all frames at once.
+Cuts a lot of disk overhead and makes things cleaner.
+
+
+
+8. PROPAINTER: Reduced RAFT Iterations (win if the center of captions is static - if not, switch to medium value i.e. 12 or 14)
+
+Reduced RAFT optical flow iterations from default 20 to 6.
+RAFT computes motion between frames - fewer iterations = faster but slightly less accurate flow.
+For static/slow-moving captions, 6 iterations provides sufficient accuracy while cutting flow computation time pretty much. 
+
+
+
+9. DIFFUERASER: Disabled Pre-Inference Pass (win if the center of captions is static - if not, better to enable the pre-inference pass)
+
+Disabled the keyframe sampling pre-inference optimization.
+Pre-inference processes a sparse set of keyframes first, then refines all frames. This adds overhead that only benefits videos with rapidly changing content.
+
+

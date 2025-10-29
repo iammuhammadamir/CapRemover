@@ -9,8 +9,12 @@ from diffueraser.diffueraser import DiffuEraser
 from propainter.inference import Propainter, get_device
 
 
-def run_inpainting(video_path, mask_path, output_dir="data/results", video_length=None, mask_dilation=8, max_img_size=480, raft_iter=12, enable_pre_inference=False, nframes=22):
-    """Run video inpainting using Propainter + DiffuEraser."""
+def run_inpainting(video_path, mask_path, output_dir="data/results", video_length=None, mask_dilation=8, max_img_size=480, raft_iter=12, enable_pre_inference=False, nframes=22, propainter_only=False):
+    """Run video inpainting using Propainter + DiffuEraser.
+    
+    Args:
+        propainter_only: If True, skip DiffuEraser refinement and return only ProPainter result
+    """
     os.makedirs(output_dir, exist_ok=True)
     priori_path = os.path.join(output_dir, "propainter_result.mp4")
     final_path = os.path.join(output_dir, "diffueraser_result.mp4")
@@ -73,6 +77,23 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     )
     prop_time = time.time() - prop_start
     print(f"Propainter inference completed in {prop_time:.2f}s")
+    
+    # Early exit if propainter_only mode
+    if propainter_only:
+        total_time = time.time() - start
+        print(f"\n⚠️  propainter_only=True: Skipping DiffuEraser refinement")
+        print(f"\n=== Inpainting Summary (ProPainter only) ===")
+        print(f"I/O (in-memory optimization):")
+        print(f"  Initial load:      {io_time:.2f}s")
+        print(f"Model loading:")
+        print(f"  Propainter load:   {model_load_time:.2f}s")
+        print(f"Inference:")
+        print(f"  Propainter:        {prop_time:.2f}s")
+        print(f"Total inpainting:    {total_time:.2f}s")
+        print(f"\nOutput:")
+        print(f"  Propainter: {priori_path}")
+        torch.cuda.empty_cache()
+        return priori_path, None
     
     # Load priori frames for passing to DiffuEraser (torchvision batch loading)
     print("\n  Loading Propainter output for in-memory passing...")

@@ -54,7 +54,7 @@ print("=" * 60)
 visualize_roi(video, roi, frame_idx)
 
 print("")
-print("✅ Preview saved! Check: data/results/roi_preview.png")
+print("Preview saved! Check: data/results/roi_preview.png")
 print("")
 print("Copy this line to main.py (line 25) when ready:")
 print(f"    roi = ({x}, {y}, {width}, {height})")
