@@ -23,7 +23,12 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+PIPFILE.lock
+
+# Environment variables
+.env
+.env.local
+test_modal_api.py
 
 # Virtual environments
 .env
@@ -65,3 +70,6 @@ logs/
 **/setup-project.sh
 setup-project.sh
 DOCKER-USAGE.txt
+
+modal_docs
+

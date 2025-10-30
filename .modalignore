@@ -1,0 +1,39 @@
+# Exclude data files and results
+data/
+*.mp4
+*.avi
+*.mov
+
+# Exclude git and cache
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Exclude environment files
+.env
+.venv/
+venv/
+env/
+
+# Exclude development files
+.DS_Store
+*.log
+terminal_output.txt
+
+# Exclude documentation
+docs/
+modal_docs/
+README.md
+
+# Exclude test files
+find_roi.py
+r2_test.py
+
+# Keep only essential source code
+# src/ is included
+# main.py is included for reference
