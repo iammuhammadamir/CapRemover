@@ -1,0 +1,183 @@
+============================================================
+[1/5] PREPROCESSING VIDEO
+============================================================
+
+Processed video: data/examples/long_preprocessed.mp4
+Resolution: 900x1600, FPS: 24.0
+Preprocessing completed in 3.57s
+
+============================================================
+[2/5] CREATING MASK
+============================================================
+ROI preview saved to: data/results/roi_preview.png
+mask.create_mask_video: Creating mask from video: data/examples/long_preprocessed.mp4
+mask.create_mask_video: OPTIMIZATION ENABLED - Processing only even frames (50% OCR reduction)
+mask.create_mask_video: Initializing video reader...
+mask.create_mask_video: Video info: 1339 frames, 24.00 fps, 900x1600
+mask.create_mask_video: Initializing OCR model...
+mask.create_mask_video: Settings: MODEL=PP-OCRv5_server_det, DEBUG=False, BATCH_SIZE=32, LIMIT_SIDE_LEN=1024, UNCLIP_RATIO=2.5, MASK_DILATION=10, ROI=(191, 1083, 508, 150)
+mask.create_mask_video: Phase 1 - Processing even frames through OCR (batch size: 32)...
+mask.create_mask_video: Progress (even frames): 480/670 frames (88.39 fps)
+mask.create_mask_video: Progress (even frames): 670/670 frames (99.69 fps)
+mask.create_mask_video: Phase 1 completed in 5.41s
+mask.create_mask_video: Phase 2 - Interpolating odd frames and writing video...
+mask.create_mask_video: Writing progress: 60/1339 frames
+mask.create_mask_video: Writing progress: 120/1339 frames
+mask.create_mask_video: Writing progress: 180/1339 frames
+mask.create_mask_video: Writing progress: 240/1339 frames
+mask.create_mask_video: Writing progress: 300/1339 frames
+mask.create_mask_video: Writing progress: 360/1339 frames
+mask.create_mask_video: Writing progress: 420/1339 frames
+mask.create_mask_video: Writing progress: 480/1339 frames
+mask.create_mask_video: Writing progress: 540/1339 frames
+mask.create_mask_video: Writing progress: 600/1339 frames
+mask.create_mask_video: Writing progress: 660/1339 frames
+mask.create_mask_video: Writing progress: 720/1339 frames
+mask.create_mask_video: Writing progress: 780/1339 frames
+mask.create_mask_video: Writing progress: 840/1339 frames
+mask.create_mask_video: Writing progress: 900/1339 frames
+mask.create_mask_video: Writing progress: 960/1339 frames
+mask.create_mask_video: Writing progress: 1020/1339 frames
+mask.create_mask_video: Writing progress: 1080/1339 frames
+mask.create_mask_video: Writing progress: 1140/1339 frames
+mask.create_mask_video: Writing progress: 1200/1339 frames
+mask.create_mask_video: Writing progress: 1260/1339 frames
+mask.create_mask_video: Writing progress: 1320/1339 frames
+mask.create_mask_video: Writing progress: 1339/1339 frames
+
+mask.create_mask_video: === Summary ===
+mask.create_mask_video: Total frames: 1339
+mask.create_mask_video: Even frames processed (OCR): 670
+mask.create_mask_video: Odd frames interpolated (union): 669
+mask.create_mask_video: OCR processing time: 5.41s
+mask.create_mask_video: Interpolation + writing time: 3.00s
+mask.create_mask_video: Total time: 9.72s (137.70 fps)
+
+mask.create_mask_video: Output files:
+mask.create_mask_video:   Mask video: data/results/mask_video.mp4
+
+Mask video: data/results/mask_video.mp4
+Mask creation completed in 9.84s
+
+============================================================
+[3/5] CROPPING TO 2X ROI REGION
+============================================================
+Cropping video from 900x1600 to 900x300
+Original ROI: (191, 1083, 508, 150)
+Crop region: (0, 1008, 900, 300)
+New ROI in cropped coords: (191, 75, 508, 150)
+Cropping video from 900x1600 to 900x300
+Original ROI: (191, 1083, 508, 150)
+Crop region: (0, 1008, 900, 300)
+New ROI in cropped coords: (191, 75, 508, 150)
+
+Cropped video: data/results/video_cropped_2x_roi.mp4
+Cropped mask: data/results/mask_cropped_2x_roi.mp4
+Cropping completed in 2.78s
+
+============================================================
+[4/5] INPAINTING (2X ROI REGION)
+============================================================
+
+Starting inpainting pipeline...
+Input video: data/results/video_cropped_2x_roi.mp4
+Input mask: data/results/mask_cropped_2x_roi.mp4
+Output mode: diffueraser
+Using device: cuda
+
+[0/2] Loading frames in memory (optimization)...
+  Loaded 1339 video frames + 1339 mask frames in 2.55s
+  Memory usage: ~1034.3 MB
+
+[1/2] Running Propainter...
+Loading Propainter model (first run may take 1-2 minutes)...
+Propainter model loaded in 0.35s
+  ProPainter output will be kept in memory only (optimization)
+  [3a] Preprocessing (resize+tensor+GPU): 6.64s
+  ProPainter inference: [1339 frames]...
+  [3b] RAFT optical flow (6 iters): 9.92s
+  [3c] Flow completion: 3.63s
+  ProPainter total (in-memory): 46.71s
+  Skipped disk write - frames kept in memory
+Propainter inference completed in 46.71s
+
+  Using ProPainter frames from memory (1339 frames) - saved disk I/O!
+
+[2/2] Running DiffuEraser...
+Loading DiffuEraser model (first run may take 1-2 minutes)...
+DiffuEraser.__init__: xFormers not available (Refer to https://github.com/facebookresearch/xformers for more information on how to install xformers), using SDPA)
+DiffuEraser model loaded in 2.26s
+  [4a] Preprocessing (load+resize): 8.30s
+  DiffuEraser inference...
+  [4b] Image preprocessing (1339 frames, vectorized): 1.52s
+  [4c] VAE encode (1339 frames, batch=16): 17.30s
+  [4d] Shallow copy optimization (deep copy skipped)
+  [4e] Pre-inference: SKIPPED (enable_pre_inference=False)
+  [4f] Main inference: Starting full video pass...
+    [4f.1] Add noise to 1339 frames: 0.00s
+    [4f.2] UNet+BrushNet+VAE pipeline (2 steps, 1339 frames): 117.38s
+  [4f] Main inference TOTAL: 117.38s
+  [4g] Compositing: Blending inpainted frames with original...
+    [4g.1] Mask blurring (1339 frames): 0.98s
+    [4g.2] Frame blending (1339 frames): 1.21s
+    [4g.3] Video encoding (1339 frames): 0.85s
+  [4g] Compositing TOTAL: 3.03s
+  DiffuEraser total: 148.18s
+DiffuEraser inference completed in 148.19s
+
+=== Inpainting Summary ===
+I/O (in-memory optimization):
+  Initial load:      2.55s
+  Priori load:       0.00s (in-memory, saved disk I/O!)
+Model loading:
+  Propainter load:   0.35s
+  DiffuEraser load:  2.26s
+Inference:
+  Propainter:        46.71s
+  DiffuEraser:       148.19s
+Total inpainting:    200.07s
+
+I/O Savings: ProPainter kept in memory, avoided disk write+read
+
+Outputs:
+  Propainter: (in-memory only, not saved)
+  DiffuEraser: data/results/diffueraser_result.mp4
+
+============================================================
+[5/6] COMPOSITING RESULTS
+============================================================
+
+=== Compositing Settings ===
+Preprocessed video: 900x1600
+Crop region used: 900x300 at (0, 1008)
+Overlay position: (0, 1008)
+
+⚠️  Skipping ProPainter composite (output_from='diffueraser')
+
+Compositing DiffuEraser result...
+✓ DiffuEraser composited: data/results/diffueraser_composited.mp4
+Compositing completed in 2.55s
+
+============================================================
+PIPELINE COMPLETE
+============================================================
+
+⏱️  TIMING BREAKDOWN:
+  [1] Preprocessing:    3.57s
+  [2] Mask creation:    9.84s
+  [3] ROI Cropping:     2.78s
+  [4] Inpainting:     200.09s
+  [5] Compositing:      2.55s
+  -----------------------------------
+  TOTAL TIME:        218.95s (3.6 min)
+
+📁 INTERMEDIATE FILES:
+  • Cropped video:   data/results/video_cropped_2x_roi.mp4
+  • Cropped mask:    data/results/mask_cropped_2x_roi.mp4
+  • Propainter:      (in-memory only, not saved)
+  • DiffuEraser:     data/results/diffueraser_result.mp4
+
+📁 FINAL COMPOSITED VIDEOS:
+  • DiffuEraser:     data/results/diffueraser_composited.mp4
+
+✨ DiffuEraser composited is the refined final result!

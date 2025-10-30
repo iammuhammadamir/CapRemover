@@ -9,12 +9,16 @@ from diffueraser.diffueraser import DiffuEraser
 from propainter.inference import Propainter, get_device
 
 
-def run_inpainting(video_path, mask_path, output_dir="data/results", video_length=None, mask_dilation=8, max_img_size=480, raft_iter=12, enable_pre_inference=False, nframes=22, propainter_only=False):
+def run_inpainting(video_path, mask_path, output_dir="data/results", video_length=None, mask_dilation=8, max_img_size=480, raft_iter=12, enable_pre_inference=False, nframes=22, propainter_only=False, output_from="diffueraser"):
     """Run video inpainting using Propainter + DiffuEraser.
     
     Args:
-        propainter_only: If True, skip DiffuEraser refinement and return only ProPainter result
+        propainter_only: DEPRECATED - use output_from instead. If True, skip DiffuEraser refinement
+        output_from: "propainter" or "diffueraser" - which model's output to use as final result
     """
+    # Handle deprecated propainter_only parameter
+    if propainter_only:
+        output_from = "propainter"
     os.makedirs(output_dir, exist_ok=True)
     priori_path = os.path.join(output_dir, "propainter_result.mp4")
     final_path = os.path.join(output_dir, "diffueraser_result.mp4")
@@ -29,6 +33,7 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     print(f"\nStarting inpainting pipeline...")
     print(f"Input video: {video_path}")
     print(f"Input mask: {mask_path}")
+    print(f"Output mode: {output_from}")
     
     device = get_device()
     print(f"Using device: {device}")
@@ -67,21 +72,40 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     print(f"Propainter model loaded in {model_load_time:.2f}s")
     
     prop_start = time.time()
-    propainter_model.forward(
-        video_path, mask_path, priori_path, video_length=video_length, 
-        ref_stride=10, neighbor_length=10, subvideo_length=50, 
-        mask_dilation=mask_dilation, raft_iter=raft_iter,
-        preloaded_video_frames=video_frames,
-        preloaded_video_fps=video_fps,
-        preloaded_mask_frames=mask_frames
-    )
+    
+    # Determine if we need to save ProPainter to disk
+    save_propainter_to_disk = (output_from == "propainter")
+    
+    if save_propainter_to_disk:
+        # ProPainter is final output - write to disk
+        propainter_model.forward(
+            video_path, mask_path, priori_path, video_length=video_length, 
+            ref_stride=10, neighbor_length=10, subvideo_length=50, 
+            mask_dilation=mask_dilation, raft_iter=raft_iter,
+            preloaded_video_frames=video_frames,
+            preloaded_video_fps=video_fps,
+            preloaded_mask_frames=mask_frames
+        )
+        priori_frames = None  # Not needed
+    else:
+        # DiffuEraser is final output - keep ProPainter frames in memory only
+        print("  ProPainter output will be kept in memory only (optimization)")
+        priori_frames = propainter_model.forward_in_memory(
+            video_path, mask_path, video_length=video_length, 
+            ref_stride=10, neighbor_length=10, subvideo_length=50, 
+            mask_dilation=mask_dilation, raft_iter=raft_iter,
+            preloaded_video_frames=video_frames,
+            preloaded_video_fps=video_fps,
+            preloaded_mask_frames=mask_frames
+        )
+    
     prop_time = time.time() - prop_start
     print(f"Propainter inference completed in {prop_time:.2f}s")
     
-    # Early exit if propainter_only mode
-    if propainter_only:
+    # Early exit if propainter mode
+    if output_from == "propainter":
         total_time = time.time() - start
-        print(f"\n⚠️  propainter_only=True: Skipping DiffuEraser refinement")
+        print(f"\noutput_from='propainter': Skipping DiffuEraser refinement")
         print(f"\n=== Inpainting Summary (ProPainter only) ===")
         print(f"I/O (in-memory optimization):")
         print(f"  Initial load:      {io_time:.2f}s")
@@ -95,13 +119,18 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
         torch.cuda.empty_cache()
         return priori_path, None
     
-    # Load priori frames for passing to DiffuEraser (torchvision batch loading)
-    print("\n  Loading Propainter output for in-memory passing...")
-    priori_load_start = time.time()
-    priori_vframes, _, _ = torchvision.io.read_video(filename=priori_path, pts_unit='sec', end_pts=video_length)
-    priori_frames = [Image.fromarray(f.numpy()) for f in priori_vframes]
-    priori_load_time = time.time() - priori_load_start
-    print(f"  Loaded {len(priori_frames)} priori frames in {priori_load_time:.2f}s (torchvision batch)")
+    # For DiffuEraser mode, priori_frames already in memory (no disk I/O needed)
+    priori_load_time = 0.0
+    if priori_frames is None:
+        # Fallback: load from disk if something went wrong
+        print("\n  WARNING: Loading Propainter output from disk (fallback)...")
+        priori_load_start = time.time()
+        priori_vframes, _, _ = torchvision.io.read_video(filename=priori_path, pts_unit='sec', end_pts=video_length)
+        priori_frames = [Image.fromarray(f.numpy()) for f in priori_vframes]
+        priori_load_time = time.time() - priori_load_start
+        print(f"  Loaded {len(priori_frames)} priori frames in {priori_load_time:.2f}s (torchvision batch)")
+    else:
+        print(f"\n  Using ProPainter frames from memory ({len(priori_frames)} frames) - saved disk I/O!")
     
     print("\n[2/2] Running DiffuEraser...")
     print("Loading DiffuEraser model (first run may take 1-2 minutes)...")
@@ -128,7 +157,10 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     print(f"\n=== Inpainting Summary ===")
     print(f"I/O (in-memory optimization):")
     print(f"  Initial load:      {io_time:.2f}s")
-    print(f"  Priori load:       {priori_load_time:.2f}s")
+    if priori_load_time > 0:
+        print(f"  Priori load:       {priori_load_time:.2f}s")
+    else:
+        print(f"  Priori load:       0.00s (in-memory, saved disk I/O!)")
     print(f"Model loading:")
     print(f"  Propainter load:   {model_load_time:.2f}s")
     print(f"  DiffuEraser load:  {diffueraser_load_time:.2f}s")
@@ -136,11 +168,16 @@ def run_inpainting(video_path, mask_path, output_dir="data/results", video_lengt
     print(f"  Propainter:        {prop_time:.2f}s")
     print(f"  DiffuEraser:       {diff_time:.2f}s")
     print(f"Total inpainting:    {total_time:.2f}s")
-    print(f"\nI/O Savings: Avoided redundant disk reads in ProPainter and DiffuEraser")
+    print(f"\nI/O Savings: ProPainter kept in memory, avoided disk write+read")
     print(f"\nOutputs:")
-    print(f"  Propainter: {priori_path}")
-    print(f"  DiffuEraser: {final_path}")
-    
-    torch.cuda.empty_cache()
-    return priori_path, final_path
+    if output_from == "diffueraser":
+        print(f"  Propainter: (in-memory only, not saved)")
+        print(f"  DiffuEraser: {final_path}")
+        torch.cuda.empty_cache()
+        return None, final_path  # ProPainter path is None
+    else:
+        print(f"  Propainter: {priori_path}")
+        print(f"  DiffuEraser: {final_path}")
+        torch.cuda.empty_cache()
+        return priori_path, final_path
 

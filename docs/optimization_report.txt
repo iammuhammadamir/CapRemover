@@ -32,32 +32,34 @@ This makes all video processing faster since encoding moves to the GPU and frees
 
 
 
-3. VIDEO ENCODING: Fast Preset Optimization if NVENC not available (win-win)
+3. VIDEO ENCODING: Fast Preset Optimization for intermediate files (win-win)
 
-When the GPU encoder isn’t available, the FFmpeg preset now uses "ultrafast" instead of "medium".
-This prioritizes speed over compression, which is fine for temporary intermediate files. The final composited file still uses the same "medium" 
+FFmpeg preset now uses "ultrafast" instead of "medium" for the temporary intermediate files. This doesn't impact the 
+quality of final output video. 
 
 
 
 4. DIFFUERASER: Increased Processing Batch Size (win-win)
 
-Location: src/stages/inpaint/DiffuEraser/diffueraser/diffueraser.py
-Increased the nframes parameter from 22 to 32 for H100 GPUs.
+Increased the nframes parameter from 22 to 32 for H100 GPUs.And, the batch size is preferred to be multiple of 16 or power of 2.
 This means the model processes more frames per batch, leading to fewer chunks and better GPU utilization.
 
 
 
 5. DIFFUERASER: Vectorized Image Preprocessing (win-win)
 
+Vectorized operations are faster than simple for loops. 
 Instead of converting each frame to the GPU one by one, all frames are now batched and sent together.
 Removes a lot of Python overhead and makes data transfers faster.
+
+Moreover, Increased the VAE encoding batch size from 8 to 16 frames per batch.
 
 
 
 6. DIFFUERASER: Shallow Copy Optimization (win-win)
 
 Switched from deep copying frames and masks to shallow references.
-Safe because they’re only read, not modified.
+Safe because they're only read, not modified.
 Removes unnecessary memory duplication.
 
 
@@ -75,7 +77,7 @@ Cuts a lot of disk overhead and makes things cleaner.
 
 Reduced RAFT optical flow iterations from default 20 to 6.
 RAFT computes motion between frames - fewer iterations = faster but slightly less accurate flow.
-For static/slow-moving captions, 6 iterations provides sufficient accuracy while cutting flow computation time pretty much. 
+For static/slow-moving captions, 6 iterations provides sufficient accuracy while cutting flow computation time.
 
 
 

@@ -1,5 +1,6 @@
 # IMPORTANT: Import torch FIRST to initialize CUDA before PaddlePaddle
 # This prevents CUDA initialization conflicts between PyTorch and PaddlePaddle
+
 import torch
 torch.cuda.init()  # Force CUDA initialization
 
@@ -37,7 +38,7 @@ def main():
     video = "data/examples/long.mp4"
     max_resolution = 1600  # 900p max dimension (900p = 1600x900)
     target_fps = 24.0
-    debug = True  # Set to True to enable video compression
+    debug = False  # Set to True to enable video compression
 
     # TODO: Adjust ROI for long.mp4 - use roi.py to find the correct values
     # Run: python roi.py to find the correct x, y,`` width, height for the caption region
@@ -47,7 +48,7 @@ def main():
     # Optimization settings
     raft_iter = 6  # Reduce RAFT iterations 
     enable_pre_inference = False  # captions are static mostly, so, we can skip the pre-inference
-    propainter_only = False  # Set to True to skip DiffuEraser refinement (faster)
+    output_from = "diffueraser"  # Options: "propainter" or "diffueraser" - which model's output to use
 
 
 
@@ -110,7 +111,7 @@ def main():
         max_img_size=720,
         raft_iter=raft_iter,
         enable_pre_inference=enable_pre_inference,
-        propainter_only=propainter_only
+        output_from=output_from
     )
     inpaint_time = time.time() - inpaint_start
     
@@ -158,16 +159,25 @@ def main():
     print(f"\n📁 INTERMEDIATE FILES:")
     print(f"  • Cropped video:   {cropped_video}")
     print(f"  • Cropped mask:    {cropped_mask}")
-    print(f"  • Propainter:      {propainter_output}")
+    if propainter_output:
+        print(f"  • Propainter:      {propainter_output}")
+    else:
+        print(f"  • Propainter:      (in-memory only, not saved)")
     if diffueraser_output:
         print(f"  • DiffuEraser:     {diffueraser_output}")
+    
     print(f"\n📁 FINAL COMPOSITED VIDEOS:")
-    print(f"  • Propainter:      {propainter_composited}")
+    if propainter_composited:
+        print(f"  • Propainter:      {propainter_composited}")
     if diffueraser_composited:
         print(f"  • DiffuEraser:     {diffueraser_composited}")
+    
+    if output_from == "diffueraser" and diffueraser_composited:
         print(f"\n✨ DiffuEraser composited is the refined final result!")
+    elif output_from == "propainter" and propainter_composited:
+        print(f"\n✨ ProPainter composited is the final result!")
     else:
-        print(f"\n✨ ProPainter composited is the final result (propainter_only mode)!")
+        print(f"\n✨ Processing complete!")
 
 if __name__ == "__main__":
     # Redirect stdout to both terminal and file

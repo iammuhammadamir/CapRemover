@@ -187,10 +187,11 @@ class Propainter:
                                         model_dir=propainter_model_dir, progress=True, file_name=None)
         self.model = InpaintGenerator(model_path=ckpt_path).to(device)
         self.model.eval()
-    def forward(self, video, mask, output_path, resize_ratio=0.6, video_length=2, height=-1, width=-1,
+    def forward(self, video, mask, output_path=None, resize_ratio=0.6, video_length=2, height=-1, width=-1,
                 mask_dilation=4, ref_stride=10, neighbor_length=10, subvideo_length=80,
                 raft_iter=20, save_fps=24, save_frames=False, fp16=True,
-                preloaded_video_frames=None, preloaded_video_fps=None, preloaded_mask_frames=None):
+                preloaded_video_frames=None, preloaded_video_fps=None, preloaded_mask_frames=None,
+                return_frames_only=False):
         
         import time
         forward_start = time.time()
@@ -534,8 +535,22 @@ class Propainter:
             
             torch.cuda.empty_cache()
 
-        ##save composed video##
+        ##save composed video or return frames##
         comp_frames = [cv2.resize(f, out_size) for f in comp_frames]
+        
+        # If return_frames_only is True, skip disk write and return PIL Images
+        if return_frames_only:
+            from PIL import Image
+            comp_frames_pil = [Image.fromarray(cv2.cvtColor(f.astype(np.uint8), cv2.COLOR_BGR2RGB)) for f in comp_frames]
+            
+            total_propainter_time = time.time() - forward_start
+            print(f"  ProPainter total (in-memory): {total_propainter_time:.2f}s")
+            print(f"  Skipped disk write - frames kept in memory")
+            
+            torch.cuda.empty_cache()
+            return comp_frames_pil
+        
+        # Otherwise, write to disk as usual
         write_start = time.time()
         writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*"mp4v"),
                                 fps, (comp_frames[0].shape[1],comp_frames[0].shape[0]))
@@ -552,6 +567,30 @@ class Propainter:
         torch.cuda.empty_cache()
 
         return output_path
+
+    def forward_in_memory(self, video, mask, resize_ratio=0.6, video_length=2, height=-1, width=-1,
+                mask_dilation=4, ref_stride=10, neighbor_length=10, subvideo_length=80,
+                raft_iter=20, save_fps=24, fp16=True,
+                preloaded_video_frames=None, preloaded_video_fps=None, preloaded_mask_frames=None):
+        """
+        Run ProPainter inference and return frames in memory without writing to disk.
+        This is a thin wrapper around forward() with return_frames_only=True.
+        
+        Returns:
+            List of PIL.Image frames
+        """
+        return self.forward(
+            video, mask, output_path=None,
+            resize_ratio=resize_ratio, video_length=video_length,
+            height=height, width=width, mask_dilation=mask_dilation,
+            ref_stride=ref_stride, neighbor_length=neighbor_length,
+            subvideo_length=subvideo_length, raft_iter=raft_iter,
+            save_fps=save_fps, fp16=fp16,
+            preloaded_video_frames=preloaded_video_frames,
+            preloaded_video_fps=preloaded_video_fps,
+            preloaded_mask_frames=preloaded_mask_frames,
+            return_frames_only=True
+        )
 
 
 

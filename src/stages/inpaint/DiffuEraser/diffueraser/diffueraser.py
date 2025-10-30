@@ -285,13 +285,13 @@ class DiffuEraser:
         self.pipeline.scheduler = UniPCMultistepScheduler.from_config(self.pipeline.scheduler.config)
         self.pipeline.set_progress_bar_config(disable=True)
         
-        ### OPTIMIZATION_NUMBER_2
+        
         # Enable memory-efficient attention (xFormers or SDPA)
         try:
             self.pipeline.enable_xformers_memory_efficient_attention()
             print("DiffuEraser.__init__: Enabled xFormers memory-efficient attention")
         except Exception as e:
-            print(f"DiffuEraser.__init__: xFormers not available ({e}), using default attention (PyTorch 2.0+ will use SDPA)")
+            print(f"DiffuEraser.__init__: xFormers not available ({e}), using SDPA)")
         
         # Enable TF32 for faster matmul on Ampere/Hopper GPUs (H100 = Hopper architecture)
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -431,7 +431,7 @@ class DiffuEraser:
         with torch.no_grad():
             pixel_values = pixel_values.to(dtype=torch.float16)
             latents = []
-            num=32  # Increased from 8 to 32 for H100 (4x larger batches = ~50% faster)
+            num=16  # Increased from 8 to 16
             for i in range(0, pixel_values.shape[0], num):
                 latents.append(self.vae.encode(pixel_values[i : i + num]).latent_dist.sample())
             latents = torch.cat(latents, dim=0)

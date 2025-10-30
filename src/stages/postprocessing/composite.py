@@ -5,24 +5,25 @@ import os
 def composite_inpainted_region(
     preprocessed_video: str,
     roi: tuple[int, int, int, int],
-    propainter_result: str,
+    propainter_result: str | None,
     diffueraser_result: str | None,
     output_dir: str = "data/results",
     expansion_factor: float = 2.0
-) -> tuple[str, str | None]:
+) -> tuple[str | None, str | None]:
     """
     Composite the inpainted results back onto the preprocessed video.
     
     Args:
         preprocessed_video: Path to the preprocessed video
         roi: (x, y, w, h) region of interest that was used for cropping
-        propainter_result: Path to propainter output
-        diffueraser_result: Path to diffueraser output
+        propainter_result: Path to propainter output (can be None if output_from="diffueraser")
+        diffueraser_result: Path to diffueraser output (can be None if output_from="propainter")
         output_dir: Directory for output videos
         expansion_factor: Factor used to expand ROI (should match crop_video_to_roi)
     
     Returns:
         Tuple of (propainter_composited_path, diffueraser_composited_path)
+        Either can be None depending on output_from mode
     """
     os.makedirs(output_dir, exist_ok=True)
     
@@ -66,32 +67,35 @@ def composite_inpainted_region(
     propainter_composited = os.path.join(output_dir, "propainter_composited.mp4")
     diffueraser_composited = os.path.join(output_dir, "diffueraser_composited.mp4")
     
-    # Composite Propainter
-    print(f"\nCompositing Propainter result...")
-    _composite_single(
-        preprocessed_video,
-        propainter_result,
-        propainter_composited,
-        crop_w, crop_h,
-        crop_x, crop_y
-    )
-    print(f"✓ Propainter composited: {propainter_composited}")
+    # Composite Propainter (skip if None)
+    if propainter_result is None:
+        print(f"\n⚠️  Skipping ProPainter composite (output_from='diffueraser')")
+        propainter_composited = None
+    else:
+        print(f"\nCompositing Propainter result...")
+        _composite_single(
+            preprocessed_video,
+            propainter_result,
+            propainter_composited,
+            crop_w, crop_h,
+            crop_x, crop_y
+        )
+        print(f"✓ Propainter composited: {propainter_composited}")
     
-    # Skip DiffuEraser if not provided (propainter_only mode)
+    # Composite DiffuEraser (skip if None)
     if diffueraser_result is None:
-        print(f"\n⚠️  Skipping DiffuEraser composite (propainter_only mode)")
-        return propainter_composited, None
-    
-    # Composite DiffuEraser
-    print(f"\nCompositing DiffuEraser result...")
-    _composite_single(
-        preprocessed_video,
-        diffueraser_result,
-        diffueraser_composited,
-        crop_w, crop_h,
-        crop_x, crop_y
-    )
-    print(f"✓ DiffuEraser composited: {diffueraser_composited}")
+        print(f"\n⚠️  Skipping DiffuEraser composite (output_from='propainter')")
+        diffueraser_composited = None
+    else:
+        print(f"\nCompositing DiffuEraser result...")
+        _composite_single(
+            preprocessed_video,
+            diffueraser_result,
+            diffueraser_composited,
+            crop_w, crop_h,
+            crop_x, crop_y
+        )
+        print(f"✓ DiffuEraser composited: {diffueraser_composited}")
     
     return propainter_composited, diffueraser_composited
 
