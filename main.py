@@ -14,7 +14,7 @@ from src.stages.postprocessing.compress import compress_videos
 
 
 class TeeOutput:
-    """Write to both console and file simultaneously."""
+    """Write to both console and output filee"""
     def __init__(self, file_path):
         self.terminal = sys.stdout
         self.log = open(file_path, 'w', buffering=1)  # Line buffered
@@ -52,7 +52,7 @@ def main():
 
 
 
-    # [1/5] Preprocessing
+
     print("=" * 60)
     print("[1/5] PREPROCESSING VIDEO")
     print("=" * 60)
@@ -65,7 +65,7 @@ def main():
     print(f"Resolution: {info.width}x{info.height}, FPS: {info.fps}")
     print(f"Preprocessing completed in {preprocess_time:.2f}s")
 
-    # [2/5] Create mask
+
     print("\n" + "=" * 60)
     print("[2/5] CREATING MASK")
     print("=" * 60)
@@ -77,7 +77,7 @@ def main():
     print(f"\nMask video: {mask_video}")
     print(f"Mask creation completed in {mask_time:.2f}s")
     
-    # [3/5] Crop to 2x ROI region for inpainting
+
     print("\n" + "=" * 60)
     print("[3/5] CROPPING TO 2X ROI REGION")
     print("=" * 60)
@@ -99,7 +99,7 @@ def main():
     print(f"Cropped mask: {cropped_mask}")
     print(f"Cropping completed in {crop_time:.2f}s")
     
-    # [4/5] Run inpainting on cropped region
+
     print("\n" + "=" * 60)
     print("[4/5] INPAINTING (2X ROI REGION)")
     print("=" * 60)
@@ -115,7 +115,7 @@ def main():
     )
     inpaint_time = time.time() - inpaint_start
     
-    # [5/6] Composite inpainted regions back onto preprocessed video
+
     print("\n" + "=" * 60)
     print("[5/6] COMPOSITING RESULTS")
     print("=" * 60)
@@ -129,14 +129,13 @@ def main():
     composite_time = time.time() - composite_start
     print(f"Compositing completed in {composite_time:.2f}s")
     
-    # [6/6] Compress videos (if debug enabled)
+
     if debug:
         print("\n" + "=" * 60)
         print("[6/6] COMPRESSING VIDEOS")
         print("=" * 60)
         compress_start = time.time()
         overlay_video = "data/results/overlay_video.mp4"
-        # Compress all intermediate and final videos
         compress_videos(propainter_output, diffueraser_output, mask_video, overlay_video=overlay_video, debug=debug)
         compress_time = time.time() - compress_start
         print(f"Video compression completed in {compress_time:.2f}s")

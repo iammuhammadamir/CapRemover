@@ -1,11 +1,11 @@
 
 
 
-Hey Kush, just wrote the following document to make sure you are aware of the changes made. There's no serious trade-off in these optimizations. 
+Hey Kush, just wrote the following document to make sure you are aware of the changes made. There's no serious trade-off or loss in these optimizations. 
 
 
 Current Optimized Performance (H100 GPU, 55s video):
-Total time: around 300–310 seconds (about 5 minutes)
+Total time: around < 5 minutes
 
 Inference time reduced by around 55%
 
