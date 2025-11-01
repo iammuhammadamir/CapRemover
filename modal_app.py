@@ -9,6 +9,7 @@ volume = modal.Volume.from_name("caption-remover-weights", create_if_missing=Tru
 
 image = (
     modal.Image.from_registry("kashifmurtaza/caption-remover:modal-v3")
+    .env({"NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video"})  # Enable NVENC
     .add_local_dir("src", remote_path="/root/src", copy=False)
     .add_local_file("main.py", remote_path="/root/main.py", copy=False)
 )
@@ -18,7 +19,7 @@ image = (
     gpu="A100-80GB",
     timeout=3600,  # 60 minutes - increased for long videos
     image=image,
-    volumes={"/weights": volume},
+    volumes={"/weights": volume}, 
     secrets=[
         modal.Secret.from_name("r2-credentials"),
         modal.Secret.from_name("aws-s3-credentials")
@@ -78,7 +79,13 @@ class CaptionRemover:
         print("MODELS LOADED - READY FOR INFERENCE")
 
     @modal.method()
-    def remove_captions(self, video_r2_url: str, model_to_use: str = "diffueraser") -> str:
+    def remove_captions(
+        self, 
+        video_r2_url: str, 
+        model_to_use: str = "diffueraser",
+        roi_normalized: dict = None,
+        webhook_url: str = None
+    ) -> str:
         import boto3
         import tempfile
         import torch
@@ -116,7 +123,6 @@ class CaptionRemover:
 
             max_resolution = 1600
             target_fps = 24.0
-            roi = (191, 1083, 508, 150)
             raft_iter = 6
             enable_pre_inference = False
 
@@ -134,6 +140,29 @@ class CaptionRemover:
             )
             print(f"Preprocessed in {time.time() - preprocess_start:.2f}s")
             print(f"  Resolution: {info.width}x{info.height}, FPS: {info.fps}")
+
+            # Convert normalized ROI to pixel coordinates
+            if roi_normalized is None:
+                # Default ROI (hardcoded value as normalized for 900x1600)
+                roi_normalized = {"x": 0.212, "y": 0.677, "width": 0.564, "height": 0.094}
+                print(f"Using default normalized ROI: {roi_normalized}")
+            else:
+                print(f"Using provided normalized ROI: {roi_normalized}")
+            
+            # Convert to pixel coordinates based on preprocessed video dimensions
+            roi_x = int(roi_normalized["x"] * info.width)
+            roi_y = int(roi_normalized["y"] * info.height)
+            roi_w = int(roi_normalized["width"] * info.width)
+            roi_h = int(roi_normalized["height"] * info.height)
+            
+            # Ensure even numbers (required for video encoding)
+            roi_x = roi_x - (roi_x % 2)
+            roi_y = roi_y - (roi_y % 2)
+            roi_w = roi_w - (roi_w % 2)
+            roi_h = roi_h - (roi_h % 2)
+            
+            roi = (roi_x, roi_y, roi_w, roi_h)
+            print(f"  Pixel ROI: {roi} for {info.width}x{info.height} video")
 
             print("Creating mask...")
             mask_start = time.time()
@@ -236,27 +265,115 @@ class CaptionRemover:
             print(f"PROCESSING COMPLETE - {total_time:.2f}s ({total_time/60:.1f} min)")
             print(f"Result URL: {result_url}")
 
+            # Call webhook if provided
+            if webhook_url:
+                try:
+                    import requests
+                    webhook_payload = {
+                        "status": "success",
+                        "result_url": result_url,
+                        "model_used": model_to_use,
+                        "processing_time": total_time,
+                        "video_url": video_r2_url
+                    }
+                    webhook_response = requests.post(webhook_url, json=webhook_payload, timeout=30)
+                    print(f"Webhook called: {webhook_url} (status: {webhook_response.status_code})")
+                except Exception as e:
+                    print(f"Webhook failed (non-critical): {e}")
+
             return result_url
 
 
-@app.function(
-    image=modal.Image.debian_slim().pip_install("fastapi[standard]"),
-    timeout=3600  # 60 minutes - must match CaptionRemover timeout
-)
-@modal.fastapi_endpoint(method="POST")
-def web(data: dict):
+# FastAPI app for handling all HTTP requests in a single container
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+web_app = FastAPI()
+
+
+@web_app.post("/submit")
+async def submit_job(request: Request):
+    """Submit a video processing job."""
+    data = await request.json()
+    
     video_url = data.get("video_url")
     model = data.get("model", "diffueraser")
+    roi = data.get("roi")
+    webhook_url = data.get("webhook_url")
 
+    # Validation
     if not video_url:
-        return {"error": "video_url is required"}, 400
+        return JSONResponse({"error": "video_url is required"}, status_code=400)
     if model not in ["propainter", "diffueraser"]:
-        return {"error": "model must be 'propainter' or 'diffueraser'"}, 400
+        return JSONResponse({"error": "model must be 'propainter' or 'diffueraser'"}, status_code=400)
+    
+    # Validate ROI if provided
+    if roi is not None:
+        required_keys = ["x", "y", "width", "height"]
+        if not all(k in roi for k in required_keys):
+            return JSONResponse({"error": "roi must contain x, y, width, height"}, status_code=400)
+        if not all(isinstance(roi[k], (int, float)) for k in required_keys):
+            return JSONResponse({"error": "roi values must be numbers"}, status_code=400)
+        if not all(0 <= roi[k] <= 1 for k in required_keys):
+            return JSONResponse({"error": "roi values must be between 0 and 1"}, status_code=400)
 
+    # Spawn async job (returns immediately)
     remover = CaptionRemover()
-    result_url = remover.remove_captions.remote(video_url, model)
+    call = remover.remove_captions.spawn(video_url, model, roi, webhook_url)
 
-    return {"status": "success", "result_url": result_url, "model_used": model}
+    return {
+        "status": "processing",
+        "job_id": call.object_id,
+        "message": "Job submitted successfully. Use /status/{job_id} endpoint to check progress." + 
+                   (" Webhook will be called when complete." if webhook_url else "")
+    }
+
+
+@web_app.get("/status/{job_id}")
+async def check_status(job_id: str):
+    """Check the status of a processing job."""
+    from modal import FunctionCall
+    
+    try:
+        call = FunctionCall.from_id(job_id)
+        
+        # Try to get result (non-blocking)
+        try:
+            result_url = call.get(timeout=0)
+            return {
+                "status": "completed",
+                "result_url": result_url,
+                "job_id": job_id
+            }
+        except TimeoutError:
+            # Job still running - return 202 Accepted
+            return JSONResponse(
+                {
+                    "status": "processing",
+                    "job_id": job_id,
+                    "message": "Job is still processing. Check again in a few seconds."
+                },
+                status_code=202
+            )
+            
+    except Exception as e:
+        return JSONResponse(
+            {
+                "status": "error",
+                "job_id": job_id,
+                "error": str(e)
+            },
+            status_code=500
+        )
+
+
+@app.function(
+    image=modal.Image.debian_slim().pip_install("fastapi[standard]")
+)
+@modal.asgi_app()
+def fastapi_app():
+    """Single ASGI app handles all HTTP requests efficiently."""
+    return web_app
 
 
 @app.local_entrypoint()
@@ -264,3 +381,5 @@ def main(video_url: str, model: str = "diffueraser"):
     remover = CaptionRemover()
     result = remover.remove_captions.remote(video_url, model)
     print(f"Result: {result}")
+
+

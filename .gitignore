@@ -70,7 +70,7 @@ logs/
 **/setup-project.sh
 setup-project.sh
 DOCKER-USAGE.txt
-deployment_test.py
+# deployment_test.py
 
 modal_docs
 
