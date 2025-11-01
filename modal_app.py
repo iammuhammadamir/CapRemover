@@ -8,7 +8,7 @@ app = modal.App("caption-remover")
 volume = modal.Volume.from_name("caption-remover-weights", create_if_missing=True)
 
 image = (
-    modal.Image.from_registry("kashifmurtaza/caption-remover:modal-v2")
+    modal.Image.from_registry("kashifmurtaza/caption-remover:modal-v3")
     .add_local_dir("src", remote_path="/root/src", copy=False)
     .add_local_file("main.py", remote_path="/root/main.py", copy=False)
 )
@@ -16,7 +16,7 @@ image = (
 
 @app.cls(
     gpu="A100-80GB",
-    timeout=900,
+    timeout=3600,  # 60 minutes - increased for long videos
     image=image,
     volumes={"/weights": volume},
     secrets=[
@@ -162,39 +162,41 @@ class CaptionRemover:
 
             print("Running inpainting...")
             inpaint_start = time.time()
+            
+            # Load frames in memory for optimization
             vframes, _, info = torchvision.io.read_video(filename=cropped_video, pts_unit='sec')
             video_frames = [Image.fromarray(f.numpy()) for f in vframes]
             video_fps = info['video_fps']
             mframes, _, _ = torchvision.io.read_video(filename=cropped_mask, pts_unit='sec')
             mask_frames = [Image.fromarray(f.numpy()) for f in mframes]
 
+            # Step 1: Run ProPainter and write to disk (required for video codec processing)
+            priori_path = str(results_dir / "propainter_result.mp4")
+            self.propainter.forward(
+                cropped_video, cropped_mask, priori_path,
+                video_length=None,
+                ref_stride=10, neighbor_length=10, subvideo_length=50,
+                mask_dilation=8, raft_iter=raft_iter,
+                preloaded_video_frames=video_frames,
+                preloaded_video_fps=video_fps,
+                preloaded_mask_frames=mask_frames
+            )
+            
             if model_to_use == "propainter":
-                priori_path = str(results_dir / "propainter_result.mp4")
-                self.propainter.forward(
-                    cropped_video, cropped_mask, priori_path,
-                    video_length=None,
-                    ref_stride=10, neighbor_length=10, subvideo_length=50,
-                    mask_dilation=8, raft_iter=raft_iter,
-                    preloaded_video_frames=video_frames,
-                    preloaded_video_fps=video_fps,
-                    preloaded_mask_frames=mask_frames
-                )
+                # ProPainter only mode
                 inpaint_output = priori_path
                 propainter_output = priori_path
                 diffueraser_output = None
             else:
-                priori_frames = self.propainter.forward_in_memory(
-                    cropped_video, cropped_mask,
-                    video_length=None,
-                    ref_stride=10, neighbor_length=10, subvideo_length=50,
-                    mask_dilation=8, raft_iter=raft_iter,
-                    preloaded_video_frames=video_frames,
-                    preloaded_video_fps=video_fps,
-                    preloaded_mask_frames=mask_frames
-                )
+                # Step 2: Load ProPainter output from disk for DiffuEraser
+                # (Video codec processing is essential for quality)
+                priori_vframes, _, _ = torchvision.io.read_video(filename=priori_path, pts_unit='sec')
+                priori_frames = [Image.fromarray(f.numpy()) for f in priori_vframes]
+                
+                # Step 3: Run DiffuEraser with disk-loaded priori frames
                 diffueraser_path = str(results_dir / "diffueraser_result.mp4")
                 self.diffueraser.forward(
-                    cropped_video, cropped_mask, None, diffueraser_path,
+                    cropped_video, cropped_mask, priori_path, diffueraser_path,
                     max_img_size=720, video_length=None,
                     mask_dilation_iter=8, guidance_scale=None,
                     enable_pre_inference=enable_pre_inference, nframes=22,
@@ -204,10 +206,11 @@ class CaptionRemover:
                     preloaded_priori_frames=priori_frames
                 )
                 inpaint_output = diffueraser_path
-                propainter_output = None
+                propainter_output = priori_path
                 diffueraser_output = diffueraser_path
 
             print(f"Inpainting completed in {time.time() - inpaint_start:.2f}s")
+            print(f"Note: ProPainter written to disk for video codec processing (required for quality)")
 
             print("Compositing result...")
             composite_start = time.time()
@@ -236,7 +239,10 @@ class CaptionRemover:
             return result_url
 
 
-@app.function(image=modal.Image.debian_slim().pip_install("fastapi[standard]"))
+@app.function(
+    image=modal.Image.debian_slim().pip_install("fastapi[standard]"),
+    timeout=3600  # 60 minutes - must match CaptionRemover timeout
+)
 @modal.fastapi_endpoint(method="POST")
 def web(data: dict):
     video_url = data.get("video_url")
